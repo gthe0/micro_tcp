@@ -5,7 +5,7 @@
  * Copyright (C) 2015-2017  Manolis Surligas <surligas@gmail.com>
  *
  * Modified by: George Theodorakis <csd4881@csd.uoc.gr>
- * Modified by: Calliope Nepheli Sfakianaki <csd5516@csd.uoc.gr>
+ * Modified by: Kalliopi Nefeli Sfakianaki <csd5516@csd.uoc.gr>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
