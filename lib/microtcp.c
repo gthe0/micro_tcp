@@ -22,6 +22,7 @@
  */
 
 #include "microtcp.h"
+#include "microtcp_utils.h"
 
 #include <assert.h>
 #include <crc32.h>
@@ -55,7 +56,8 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
         socket &&
         address &&
         socket->state != INVALID &&
-        "Something was not initialized or invalid"
+        "Something was not initialized or was invalid" &&
+        "Invalid checks should fail because we never create somethin invalid"
     );
 
     if(bind(socket->sd, address, address_len) == -1) return -1;
@@ -66,6 +68,25 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
 
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
                      socklen_t address_len) {
+
+    /* If something is not initialized we can return -1 */
+    assert(
+        socket &&
+        address &&
+        socket->state != INVALID &&
+        "Something was not initialized or was invalid" &&
+        "Invalid checks should fail because we never create somethin invalid"
+    );
+
+    microtcp_header_t connect_header = NEW_CONNECT_HEADER(socket->seq_number,socket->ack_number);
+    connect_header.checksum = crc32((uint8_t*)&connect_header, sizeof(microtcp_header_t));
+
+    if(sendto(socket->sd, &connect_header,
+            sizeof(microtcp_header_t), 0,address, address_len) == -1)
+        return -1;
+
+
+
     return 0;
 }
 
