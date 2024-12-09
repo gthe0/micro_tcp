@@ -39,8 +39,10 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
     srand(time(NULL));
     socket_obj.seq_number = rand();
 
-    if ((socket_obj.sd = socket(domain, type, protocol)) == -1)
-        socket_obj.state = INVALID;
+    if ((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+        perror("Socket could not be opened.");
+        exit(EXIT_FAILURE);
+    }
 
     return (socket_obj);
 }
@@ -60,7 +62,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     return 0;
 }
 
-int microtcp_shutdown(microtcp_sock_t *socket, int how) { return 0;}
+int microtcp_shutdown(microtcp_sock_t *socket, int how) { return 0; }
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer,
                       size_t length, int flags) {
