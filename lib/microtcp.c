@@ -22,7 +22,6 @@
  */
 
 #include "microtcp.h"
-#include "microtcp_utils.h"
 
 #include <assert.h>
 #include <crc32.h>
@@ -32,6 +31,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <time.h>
+
+#include "microtcp_utils.h"
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
     microtcp_sock_t socket_obj;
@@ -50,17 +51,13 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
 
 int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
                   socklen_t address_len) {
-
     /* If something is not initialized we can return -1 */
     assert(
-        socket &&
-        address &&
-        socket->state != INVALID &&
+        socket && address && socket->state != INVALID &&
         "Something was not initialized or was invalid" &&
-        "Invalid checks should fail because we never create somethin invalid"
-    );
+        "Invalid checks should fail because we never create somethin invalid");
 
-    if(bind(socket->sd, address, address_len) == -1) return -1;
+    if (bind(socket->sd, address, address_len) == -1) return -1;
 
     socket->state = LISTEN;
     return 0;
@@ -68,24 +65,49 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
 
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
                      socklen_t address_len) {
-
     /* If something is not initialized we can return -1 */
     assert(
-        socket &&
-        address &&
-        socket->state != INVALID &&
+        socket && address && socket->state != INVALID &&
         "Something was not initialized or was invalid" &&
-        "Invalid checks should fail because we never create somethin invalid"
-    );
+        "Invalid checks should fail because we never create somethin invalid");
 
-    microtcp_header_t connect_header = NEW_CONNECT_HEADER(socket->seq_number,socket->ack_number);
-    connect_header.checksum = crc32((uint8_t*)&connect_header, sizeof(microtcp_header_t));
+    microtcp_header_t connect_header = NEW_CONNECT_HEADER(socket->seq_number, socket->ack_number);
+    connect_header.checksum = crc32((uint8_t *)&connect_header, sizeof(microtcp_header_t));
 
-    if(sendto(socket->sd, &connect_header,
-            sizeof(microtcp_header_t), 0,address, address_len) == -1)
+    if (sendto(socket->sd, &connect_header, sizeof(microtcp_header_t), 0,
+               address, address_len) == -1) {
         return -1;
+    }
 
+    microtcp_header_t receive_header = {0};
+    if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
+                 MSG_WAITALL, (struct sockaddr *)address, &address_len) == -1) {
+        return -1;
+    }
 
+    uint32_t checksum = receive_header.checksum;
+
+    receive_header.checksum = 0;
+    receive_header.checksum = crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
+
+    if (checksum != receive_header.checksum ||
+        receive_header.control != ACCEPT_CTRL) {
+        return -1;
+    }
+
+    connect_header.seq_number = receive_header.ack_number;
+    connect_header.ack_number = receive_header.seq_number + 1;
+    connect_header.control = ACK_BIT;
+
+    connect_header.checksum = 0;
+    connect_header.checksum = crc32((uint8_t *)&connect_header, sizeof(microtcp_header_t));
+
+    if (sendto(socket->sd, &connect_header, sizeof(microtcp_header_t), 0,
+               address, address_len) == -1){
+        return -1;
+    }
+
+    socket->state = ESTABLISHED;
 
     return 0;
 }
