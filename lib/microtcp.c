@@ -33,7 +33,6 @@
 #include <time.h>
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
-
     microtcp_sock_t socket_obj;
     memset(&socket_obj, 0, sizeof(microtcp_sock_t));
 
@@ -48,9 +47,20 @@ microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
     return (socket_obj);
 }
 
-
 int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
                   socklen_t address_len) {
+
+    /* If something is not initialized we can return -1 */
+    assert(
+        socket &&
+        address &&
+        socket->state != INVALID &&
+        "Something was not initialized or invalid"
+    );
+
+    if(bind(socket->sd, address, address_len) == -1) return -1;
+
+    socket->state = LISTEN;
     return 0;
 }
 
