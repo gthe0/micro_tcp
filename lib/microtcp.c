@@ -24,10 +24,28 @@
 #include "microtcp.h"
 #include <crc32.h>
 
+#include <netinet/in.h>
+#include <time.h>
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+
+
 microtcp_sock_t
 microtcp_socket (int domain, int type, int protocol)
 {
-  /* Your code here */
+    microtcp_sock_t socket_obj;
+    memset(&socket_obj,0,sizeof(microtcp_sock_t));
+
+    srand(time(NULL));
+    socket_obj.seq_number = rand();
+
+    if((socket_obj.sd = socket(domain,type,protocol)) == -1)
+        socket_obj.state = INVALID;
+    
+    return (socket_obj);
 }
 
 int

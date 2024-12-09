@@ -3,6 +3,7 @@
 # and academic purposes.
 #
 # Copyright (C) 2015-2017  Manolis Surligas <surligas@gmail.com>
+# Modified by: Theodorakis George <csd4881@csd.uoc.gr>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,6 +27,7 @@ if (CMAKE_VERSION VERSION_LESS "3.1")
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 else ()
 	set (CMAKE_CXX_STANDARD 11)
+    set (CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database (usefull for LSP (clangd))
 endif()
 
 # Enable all warnings during compilation, hoping that this will be 
@@ -35,7 +37,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
 
 set (microtcp_version_major 1)
 set (microtcp_version_minor 2.0)
-
 
 # uninstall target
 configure_file(
@@ -50,4 +51,3 @@ set(MICROTCP_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/utils CACHE INTERNAL "" FO
 
 add_subdirectory(lib)
 add_subdirectory(test)
-#add_subdirectory(utils) 
