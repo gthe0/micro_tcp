@@ -32,8 +32,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <bits/getopt_core.h>
+#include <linux/time.h>
 
 #include "../lib/microtcp.h"
+
 
 #define CHUNK_SIZE 4096
 
@@ -265,6 +268,7 @@ main (int argc, char **argv)
 
   /* A very easy way to parse command line arguments */
   while ((opt = getopt (argc, argv, "hsmf:p:a:")) != -1) {
+
     switch (opt)
       {
       /* If -s is set, program runs on server mode */
@@ -276,16 +280,49 @@ main (int argc, char **argv)
         use_microtcp = 1;
         break;
       case 'f':
-        filestr = strdup (optarg);
-        /* A few checks will be nice here...*/
+
+        if (filestr = strdup(optarg) == NULL) {
+          perror("strdup failed.");
+          exit(EXIT_FAILURE);
+        }
+
         /* Convert the given file to absolute path */
+        char abs_path[_PC_PATH_MAX];
+
+        if (realpath(filestr, abs_path) == NULL) {
+          perror("filename could not be resolved to an absolute path.");
+          exit(EXIT_FAILURE);
+        }
+
+        free(filestr); // free the optarg copy
+
+        if (filestr = strdup(abs_path) == NULL) {
+          perror("strdup failed.");
+          exit(EXIT_FAILURE);
+        }
+
         break;
       case 'p':
         port = atoi (optarg);
-        /* To check or not to check? */
+
+        /**
+         * Port Numbers Range: 0 - 65535
+         */
+        if (port < 0 || port > 65335) {
+          printf(
+            "Invalid port number."
+            "Port number range: [ 0 - 65335 ]\n");
+
+          exit(EXIT_FAILURE);
+        }
+
         break;
       case 'a':
-        ipstr = strdup (optarg);
+        
+        if (ipstr = strdup(optarg) == NULL) {
+          perror("strdup failed.");
+          exit(EXIT_FAILURE);
+        }
         break;
 
       default:
