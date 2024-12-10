@@ -63,6 +63,8 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
     return 0;
 }
 
+
+
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
                      socklen_t address_len) {
     /* If something is not initialized we can return -1 */
@@ -118,6 +120,8 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
 
     return 0;
 }
+
+
 
 int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                     socklen_t address_len) {
@@ -178,7 +182,41 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     return 0;
 }
 
-int microtcp_shutdown(microtcp_sock_t *socket, int how) { return 0; }
+
+
+/**
+ * Simulates the TCP POSIX shutdown() 
+ * Implements the connection termination process
+ * 
+ * RESTRICTIONS:
+ *      - Only the client can initiate the connection termination process
+ * 
+ * NOTE: In this version @param how is not used
+ */
+int microtcp_shutdown(microtcp_sock_t *socket, int how) { 
+    
+    /* If something is not initialized we can return -1 */
+    assert(
+        socket->state != INVALID &&
+        "Something was not initialized or was invalid" &&
+        "Invalid checks should fail because we never create somethin invalid");
+
+    /* The connection must be established to shut it down*/
+    if (socket->state != ESTABLISHED)   return -1;
+
+    microtcp_header_t finalize_header = NEW_FINALIZE_HEADER(socket->seq_number, socket->ack_number);
+    
+    finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
+
+    /**
+     *  Not sure how to continue...
+     * 
+     * Add destination address and port to microtcp_sock_t ???
+     */    
+
+
+ }
+
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer,
                       size_t length, int flags) {
