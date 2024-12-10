@@ -7,14 +7,23 @@
 
 #define ACCEPT_CTRL  (SYN_BIT | ACK_BIT)
 #define CONNECT_CTRL (SYN_BIT)
+#define FINALIZE_CTRL (FIN_BIT | ACK_BIT)
+
 
 #define NEW_CONNECT_HEADER(seq_number,ack_number)\
     microtcp_header_new(seq_number,ack_number,(CONNECT_CTRL),\
                         MICROTCP_WIN_SIZE ,0,0,0,0,0)
 
+
 #define NEW_ACCEPT_HEADER(seq_number,ack_number)\
     microtcp_header_new(seq_number,ack_number,(ACCEPT_CTRL),\
                         MICROTCP_WIN_SIZE ,0,0,0,0,0)
+
+
+#define NEW_FINALIZE_HEADER(seq_number,ack_number)\
+    microtcp_header_new(seq_number,ack_number,(FINALIZE_CTRL),\
+                        MICROTCP_WIN_SIZE ,0,0,0,0,0)
+
 
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */
