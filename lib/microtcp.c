@@ -243,9 +243,6 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     socket->ack_number = receive_header.seq_number + 1;
     socket->seq_number = receive_header.ack_number;
 
-    finalize_header.ack_number = receive_header.seq_number + 1;
-    finalize_header.seq_number = receive_header.ack_number;
-
     socket->state = CLOSING_BY_HOST;
 
 
