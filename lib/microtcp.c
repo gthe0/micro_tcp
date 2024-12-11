@@ -116,6 +116,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
         return -1;
     }
 
+    socket->dest_address = address; // the client now knows the server address
     socket->state = ESTABLISHED;
 
     return 0;
@@ -177,6 +178,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     socket->ack_number = receive_header.seq_number + 1;
     socket->seq_number = receive_header.ack_number;
 
+    socket->dest_address = address;
     socket->state = ESTABLISHED;
 
     return 0;
@@ -204,17 +206,88 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     /* The connection must be established to shut it down*/
     if (socket->state != ESTABLISHED)   return -1;
 
+    /* Send FIN-ACK message to server */
     microtcp_header_t finalize_header = NEW_FINALIZE_HEADER(socket->seq_number, socket->ack_number);
     
     finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
+    if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
+               socket->dest_address, sizeof(socket->dest_address)) == -1) {
+        return -1;
+    }
+
     /**
-     *  Not sure how to continue...
-     * 
-     * Add destination address and port to microtcp_sock_t ???
-     */    
+     * FOR PHASE II:
+     *      Maybe add a middle State WAIT_ACK ???
+     */
+
+    /* Receive ACK message from server */
+    microtcp_header_t receive_header = {0};
+    if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
+                 MSG_WAITALL, socket->dest_address, sizeof(socket->dest_address) == -1)) {
+        return -1;
+    }
+
+    uint32_t checksum = receive_header.checksum;
+
+    receive_header.checksum = 0;
+    receive_header.checksum =
+        crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
+
+    if (checksum != receive_header.checksum ||
+        receive_header.control != ACK_BIT) {
+        return -1;
+    }
 
 
+    socket->ack_number = receive_header.seq_number + 1;
+    socket->seq_number = receive_header.ack_number;
+
+    finalize_header.ack_number = receive_header.seq_number + 1;
+    finalize_header.seq_number = receive_header.ack_number;
+
+    socket->state = CLOSING_BY_HOST;
+
+
+    /* Receive FIN-ACK message from server */
+    memset(&receive_header,  0, sizeof(microtcp_header_t));
+    if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
+                 MSG_WAITALL, socket->dest_address, sizeof(socket->dest_address) == -1)) {
+        return -1;
+    }
+
+    uint32_t checksum = receive_header.checksum;
+
+    receive_header.checksum = 0;
+    receive_header.checksum =
+        crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
+
+    if (checksum != receive_header.checksum ||
+        receive_header.control != FINALIZE_CTRL) {
+        return -1;
+    }
+
+    socket->ack_number = receive_header.seq_number + 1;
+
+
+    /* Send ACK message to server */
+    finalize_header.control = ACK_BIT;
+    finalize_header.ack_number = socket->ack_number;
+    finalize_header.seq_number = socket->seq_number;
+
+    finalize_header.checksum = 0;
+    finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
+
+    if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
+               socket->dest_address, sizeof(socket->dest_address)) == -1) {
+        return -1;
+    }
+
+
+    close(socket->sd);
+    socket->state = CLOSED;
+
+    return 0;
  }
 
 
