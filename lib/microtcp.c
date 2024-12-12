@@ -74,12 +74,13 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
         "Something was not initialized or was invalid" &&
         "Invalid checks should fail because we never create somethin invalid");
 
-    microtcp_header_t connect_header =
-        NEW_CONNECT_HEADER(socket->seq_number, socket->ack_number);
-    connect_header.checksum =
-        crc32((uint8_t *)&connect_header, sizeof(microtcp_header_t));
+    /* Header Creation Phase */
+    microtcp_header_t connect_header = NEW_CONNECT_HEADER(socket->seq_number, socket->ack_number);
+    connect_header.checksum = crc32((uint8_t *)&connect_header, sizeof(microtcp_header_t));
 
-    if (sendto(socket->sd, &connect_header, sizeof(microtcp_header_t), 0,
+    microtcp_header_t pck_to_send = microtcp_header_hton(&connect_header);
+    /* Turn into big Endian */
+    if (sendto(socket->sd, &pck_to_send, sizeof(microtcp_header_t), 0,
                address, address_len) == -1) {
         return -1;
     }
@@ -89,6 +90,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
                  MSG_WAITALL, (struct sockaddr *)address, &address_len) == -1) {
         return -1;
     }
+    receive_header = microtcp_header_ntoh(&receive_header);
 
     uint32_t checksum = receive_header.checksum;
 
@@ -101,17 +103,18 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
         return -1;
     }
 
-    socket->ack_number = connect_header.seq_number + 1;
-    socket->seq_number = receive_header.ack_number;
+    socket->ack_number = receive_header.seq_number + 1;
+    socket->seq_number = connect_header.ack_number;
 
-    connect_header.ack_number = receive_header.seq_number + 1;
-    connect_header.seq_number = receive_header.ack_number;
+    connect_header.ack_number = socket->ack_number;
+    connect_header.seq_number = socket->seq_number;
 
     connect_header.control = ACK_BIT;
     connect_header.checksum = 0;
     connect_header.checksum =
         crc32((uint8_t *)&connect_header, sizeof(microtcp_header_t));
 
+    pck_to_send = microtcp_header_hton(&connect_header);
     if (sendto(socket->sd, &connect_header, sizeof(microtcp_header_t), 0,
                address, address_len) == -1) {
         return -1;
@@ -140,6 +143,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                  MSG_WAITALL, (struct sockaddr *)address, &address_len) == -1) {
         return -1;
     }
+    receive_header = microtcp_header_ntoh(&receive_header);
 
     uint32_t checksum = receive_header.checksum;
 
@@ -158,7 +162,9 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 
     accept_header.checksum =
         crc32((uint8_t *)&accept_header, sizeof(microtcp_header_t));
-    if (sendto(socket->sd, &accept_header, sizeof(microtcp_header_t), 0,
+
+    microtcp_header_t pck_to_send = microtcp_header_hton(&accept_header);
+    if (sendto(socket->sd, &pck_to_send, sizeof(microtcp_header_t), 0,
                address, address_len) == -1) {
         return -1;
     }
@@ -167,6 +173,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                  MSG_WAITALL, (struct sockaddr *)address, &address_len) == -1) {
         return -1;
     }
+    receive_header = microtcp_header_ntoh(&receive_header);
 
     checksum = receive_header.checksum;
     receive_header.checksum = 0;

@@ -38,6 +38,6 @@ microtcp_header_t microtcp_header_new(
 );
 
 
-void microtcp_header_ntoh(microtcp_header_t *header);
+microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header);
+microtcp_header_t microtcp_header_hton(microtcp_header_t *header);
 
-void microtcp_header_hton(microtcp_header_t *header);
