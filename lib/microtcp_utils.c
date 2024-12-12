@@ -23,7 +23,7 @@ microtcp_header_t microtcp_header_new(
 
 microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header) {
     microtcp_header_t ntoh_header = {0};
-    if (header == NULL) return;
+    if (header == NULL) return ntoh_header;
 
     ntoh_header.seq_number = ntohl(header->seq_number);
     ntoh_header.ack_number = ntohl(header->ack_number);
@@ -40,7 +40,7 @@ microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header) {
 
 microtcp_header_t microtcp_header_hton(microtcp_header_t *header) {
     microtcp_header_t hton_header = {0};
-    if (header == NULL) return;
+    if (header == NULL) return hton_header;
 
     hton_header.seq_number = htonl(header->seq_number);
     hton_header.ack_number = htonl(header->ack_number);
