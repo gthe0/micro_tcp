@@ -87,6 +87,7 @@ typedef struct
   uint64_t bytes_received;
   uint64_t bytes_lost;
 
+  socklen_t dest_address_len;
   struct sockaddr *dest_address;
   
 } microtcp_sock_t;

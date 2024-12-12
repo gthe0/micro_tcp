@@ -31,6 +31,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "microtcp_utils.h"
 
@@ -116,7 +117,9 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
         return -1;
     }
 
-    socket->dest_address = address; // the client now knows the server address
+    socket->dest_address = (struct sockaddr *)address; // the client now knows the server address
+    socket->dest_address_len = address_len;
+
     socket->state = ESTABLISHED;
 
     return 0;
@@ -178,7 +181,9 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     socket->ack_number = receive_header.seq_number + 1;
     socket->seq_number = receive_header.ack_number;
 
-    socket->dest_address = address;
+    socket->dest_address = (struct sockaddr *)address; // the client now knows the server address
+    socket->dest_address_len = address_len;
+
     socket->state = ESTABLISHED;
 
     return 0;
@@ -212,7 +217,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
     if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
-               socket->dest_address, sizeof(socket->dest_address)) == -1) {
+               socket->dest_address, socket->dest_address_len) == -1) {
         return -1;
     }
 
@@ -224,7 +229,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     /* Receive ACK message from server */
     microtcp_header_t receive_header = {0};
     if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
-                 MSG_WAITALL, socket->dest_address, sizeof(socket->dest_address) == -1)) {
+                 MSG_WAITALL, socket->dest_address, &socket->dest_address_len) == -1) {
         return -1;
     }
 
@@ -249,11 +254,11 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     /* Receive FIN-ACK message from server */
     memset(&receive_header,  0, sizeof(microtcp_header_t));
     if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
-                 MSG_WAITALL, socket->dest_address, sizeof(socket->dest_address) == -1)) {
+                 MSG_WAITALL, socket->dest_address, &socket->dest_address_len) == -1) {
         return -1;
     }
 
-    uint32_t checksum = receive_header.checksum;
+    checksum = receive_header.checksum;
 
     receive_header.checksum = 0;
     receive_header.checksum =
@@ -276,10 +281,9 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
     if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
-               socket->dest_address, sizeof(socket->dest_address)) == -1) {
+               socket->dest_address, socket->dest_address_len) == -1) {
         return -1;
     }
-
 
     close(socket->sd);
     socket->state = CLOSED;
