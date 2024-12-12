@@ -32,8 +32,8 @@ endif()
 
 # Enable all warnings during compilation, hoping that this will be 
 # helpful for the students :)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -Wunused-parameter")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra -Wunused-parameter")
 
 set (microtcp_version_major 1)
 set (microtcp_version_minor 2.0)

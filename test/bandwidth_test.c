@@ -4,6 +4,9 @@
  *
  * Copyright (C) 2015-2017  Manolis Surligas <surligas@gmail.com>
  *
+ * Modified by: George Theodorakis <csd4881@csd.uoc.gr>
+ * Modified by: Kalliopi Nefeli Sfakianaki <csd5516@csd.uoc.gr>
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -33,7 +36,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <bits/getopt_core.h>
-#include <linux/time.h>
 
 #include "../lib/microtcp.h"
 
@@ -281,7 +283,7 @@ main (int argc, char **argv)
         break;
       case 'f':
 
-        if (filestr = strdup(optarg) == NULL) {
+        if ((filestr = strdup(optarg)) == NULL) {
           perror("strdup failed.");
           exit(EXIT_FAILURE);
         }
@@ -296,7 +298,7 @@ main (int argc, char **argv)
 
         free(filestr); // free the optarg copy
 
-        if (filestr = strdup(abs_path) == NULL) {
+        if ((filestr = strdup(abs_path)) == NULL) {
           perror("strdup failed.");
           exit(EXIT_FAILURE);
         }
@@ -319,7 +321,7 @@ main (int argc, char **argv)
         break;
       case 'a':
         
-        if (ipstr = strdup(optarg) == NULL) {
+        if ((ipstr = strdup(optarg)) == NULL) {
           perror("strdup failed.");
           exit(EXIT_FAILURE);
         }
