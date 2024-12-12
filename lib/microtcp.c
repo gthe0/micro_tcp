@@ -104,7 +104,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
     }
 
     socket->ack_number = receive_header.seq_number + 1;
-    socket->seq_number = connect_header.ack_number;
+    socket->seq_number = receive_header.ack_number;
 
     connect_header.ack_number = socket->ack_number;
     connect_header.seq_number = socket->seq_number;
@@ -157,8 +157,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     }
 
     socket->ack_number = receive_header.seq_number + 1;
-    microtcp_header_t accept_header =
-        NEW_ACCEPT_HEADER(socket->seq_number, socket->ack_number);
+    microtcp_header_t accept_header = NEW_ACCEPT_HEADER(socket->seq_number, socket->ack_number);
 
     accept_header.checksum =
         crc32((uint8_t *)&accept_header, sizeof(microtcp_header_t));
@@ -168,6 +167,10 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                address, address_len) == -1) {
         return -1;
     }
+
+    /* We do not do here anything, because normally 
+    we would retransmit if we did not get an ACK back
+    */
 
     if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
                  MSG_WAITALL, (struct sockaddr *)address, &address_len) == -1) {
