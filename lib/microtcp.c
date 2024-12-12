@@ -226,7 +226,8 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     
     finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
-    if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
+    microtcp_header_t pck_to_send = microtcp_header_hton(&finalize_header);
+    if (sendto(socket->sd, &pck_to_send, sizeof(microtcp_header_t), 0,
                socket->dest_address, socket->dest_address_len) == -1) {
         return -1;
     }
@@ -242,6 +243,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
                  MSG_WAITALL, socket->dest_address, &socket->dest_address_len) == -1) {
         return -1;
     }
+    receive_header = microtcp_header_ntoh(&receive_header);
 
     uint32_t checksum = receive_header.checksum;
 
@@ -254,12 +256,11 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         return -1;
     }
 
-
+    /* ACK = M + 1, Seq = N + 1 */
     socket->ack_number = receive_header.seq_number + 1;
     socket->seq_number = receive_header.ack_number;
 
     socket->state = CLOSING_BY_HOST;
-
 
     /* Receive FIN-ACK message from server */
     memset(&receive_header,  0, sizeof(microtcp_header_t));
@@ -267,6 +268,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
                  MSG_WAITALL, socket->dest_address, &socket->dest_address_len) == -1) {
         return -1;
     }
+    receive_header = microtcp_header_ntoh(&receive_header);
 
     checksum = receive_header.checksum;
 
@@ -279,6 +281,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         return -1;
     }
 
+    /* ACK: Y + 1, SEQ: N + 1 */
     socket->ack_number = receive_header.seq_number + 1;
 
 
@@ -290,7 +293,8 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     finalize_header.checksum = 0;
     finalize_header.checksum = crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
-    if (sendto(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0,
+    pck_to_send = microtcp_header_hton(&finalize_header);
+    if (sendto(socket->sd, &pck_to_send, sizeof(microtcp_header_t), 0,
                socket->dest_address, socket->dest_address_len) == -1) {
         return -1;
     }
