@@ -36,3 +36,8 @@ microtcp_header_t microtcp_header_new(
   uint32_t future_use2,         /**< 32-bits for future use */
   uint32_t checksum             /**< CRC-32 checksum, see crc32() in utils folder */
 );
+
+
+void microtcp_header_ntoh(microtcp_header_t *header);
+
+void microtcp_header_hton(microtcp_header_t *header);
