@@ -13,15 +13,15 @@ microtcp_header_t microtcp_header_new(
 )
 {
     microtcp_header_t new_header = {
-        seq_number,
-        ack_number,
-        control,
-        window,
-        data_len,
-        future_use0,
-        future_use1,
-        future_use2,
-        checksum
+        htonl(seq_number),
+        htonl(ack_number),
+        htons(control),
+        htons(window),
+        htonl(data_len),
+        htonl(future_use0),
+        htonl(future_use1),
+        htonl(future_use2),
+        htonl(checksum)
     };
 
     return (new_header);
