@@ -21,21 +21,18 @@
 #ifndef UTILS_LOG_H_
 #define UTILS_LOG_H_
 
+/* Set to 0 to disable debug messages at compile time ;) */
+#define ENABLE_DEBUG_MSG 1
+
+#if ENABLE_DEBUG_MSG
+
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/syscall.h>
 
-/* Set to 0 to disable debug messages at compile time ;) */
-#define ENABLE_DEBUG_MSG 1
-
-#if ENABLE_DEBUG_MSG
 #define LOG_INFO(M, ...)                                                        \
-                fprintf(stderr, "[INFO]: %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
-
-#else
-#define LOG_INFO(M, ...)
-#endif
+        fprintf(stderr, "[INFO]: %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
 #define LOG_ERROR(M, ...)                                                       \
         fprintf(stderr, "[ERROR] %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
@@ -43,10 +40,13 @@
 #define LOG_WARN(M, ...)                                                                \
         fprintf(stderr, "[WARNING] %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
-#if ENABLE_DEBUG_MSG
 #define LOG_DEBUG(M, ...)                                                       \
         fprintf(stderr, "[DEBUG]: %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+
 #else
+#define LOG_ERROR(M, ...)                                                       \
+#define LOG_INFO(M, ...)
+#define LOG_WARN(M, ...)                                                                \
 #define LOG_DEBUG(M, ...)
 #endif
 

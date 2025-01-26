@@ -22,9 +22,11 @@
  */
 
 #include "microtcp.h"
+#include "microtcp_utils.h"
+
+#include <crc32.h>
 
 #include <assert.h>
-#include <crc32.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,8 +34,6 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
-
-#include "microtcp_utils.h"
 
 microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
     microtcp_sock_t socket_obj;
@@ -308,10 +308,12 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
 
 ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer,
                       size_t length, int flags) {
+    /* TODO(gtheo): implement*/
     return 0;
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length,
                       int flags) {
+    /* TODO(gtheo): implement*/
     return 0;
 }

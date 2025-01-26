@@ -1,14 +1,16 @@
 #include "microtcp.h"
 
+#include <log.h>
+#include <stdlib.h>
+
 #define ACK_BIT     1<<12
-#define RST_BIT     1<<13 /* Useless... */
+#define RST_BIT     1<<13
 #define SYN_BIT     1<<14
 #define FIN_BIT     1<<15
 
-#define ACCEPT_CTRL  (SYN_BIT | ACK_BIT)
-#define CONNECT_CTRL (SYN_BIT)
+#define ACCEPT_CTRL   (SYN_BIT | ACK_BIT)
+#define CONNECT_CTRL  (SYN_BIT)
 #define FINALIZE_CTRL (FIN_BIT | ACK_BIT)
-
 
 #define NEW_CONNECT_HEADER(seq_number,ack_number)\
     microtcp_header_new(seq_number,ack_number,(CONNECT_CTRL),\
@@ -24,6 +26,10 @@
     microtcp_header_new(seq_number,ack_number,(FINALIZE_CTRL),\
                         MICROTCP_WIN_SIZE ,0,0,0,0,0)
 
+
+// Error return
+#define CHECK_ERROR(check, message, ...)\
+    if(check){}else{LOG_ERROR(message, ##__VA_ARGS__); return EXIT_FAILURE;}
 
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */
