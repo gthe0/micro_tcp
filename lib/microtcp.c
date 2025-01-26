@@ -35,7 +35,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MIN(a,b) (a > b) ? b : a
+#define MIN(a,b) ((a > b) ? b : a)
+
+#define DATA_CHUNK_SIZE (sizeof(uint8_t) * (MICROTCP_MSS + sizeof(microtcp_header_t)))
 
 // Socket Creation
 microtcp_sock_t microtcp_socket(int domain, 
@@ -47,14 +49,16 @@ microtcp_sock_t microtcp_socket(int domain,
     srand(time(NULL));
     socket_obj.seq_number = rand();
 
-    EXIT_IF_ERROR((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1,
-                  "Socket could not be opened.");
+    EXIT_IF_ERROR((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1, "Socket could not be opened.");
+
     return (socket_obj);
 }
 
 // Bind socket to a port
-int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
-                  socklen_t address_len) {
+int microtcp_bind(microtcp_sock_t *socket,
+                  const struct sockaddr *address,
+                  socklen_t address_len)
+{
     /* If something is not initialized we can return -1 */
     assert(
         socket && address && socket->state != INVALID &&
@@ -68,8 +72,10 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
 }
 
 // TODO(gtheo): Needs refactoring
-int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
-                     socklen_t address_len) {
+int microtcp_connect(microtcp_sock_t *socket, 
+                     const struct sockaddr *address,
+                     socklen_t address_len)
+{
     /* If something is not initialized we can return -1 */
     assert(
         socket && address && socket->state != INVALID &&
@@ -132,13 +138,14 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
 
 
 // TODO(gtheo): Needs refactoring
-int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
-                    socklen_t address_len) {
+int microtcp_accept(microtcp_sock_t *socket,
+                    struct sockaddr *address,
+                    socklen_t address_len)
+{
     /* If something is not initialized we can return -1 */
-    assert(
-        socket && address && socket->state != INVALID &&
-        "Something was not initialized or was invalid" &&
-        "Invalid checks should fail because we never create somethin invalid");
+    assert( socket && address && socket->state != INVALID &&
+            "Something was not initialized or was invalid" &&
+            "Invalid checks should fail because we never create somethin invalid");
 
     microtcp_header_t receive_header = {0};
     if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
@@ -202,7 +209,6 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 }
 
 
-
 /**
  * Simulates the TCP POSIX shutdown() 
  * Implements the connection termination process
@@ -214,7 +220,8 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
  *
  * TODO(gtheo): Needs refactoring
  */
-int microtcp_shutdown(microtcp_sock_t *socket, int how) { 
+int microtcp_shutdown(microtcp_sock_t *socket, int how) 
+{ 
     
     /* If something is not initialized we can return -1 */
     assert(
@@ -288,7 +295,6 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     /* ACK: Y + 1, SEQ: N + 1 */
     socket->ack_number = receive_header.seq_number + 1;
 
-
     /* Send ACK message to server */
     finalize_header.control = ACK_BIT;
     finalize_header.ack_number = socket->ack_number;
@@ -310,14 +316,63 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
  }
 
 
-ssize_t microtcp_send(microtcp_sock_t *socket, const void *buffer,
-                      size_t length, int flags) {
-    /* TODO(gtheo): implement*/
+ssize_t microtcp_send(microtcp_sock_t *socket,
+                      const void *buffer,
+                      size_t length,
+                      int flags)
+{
+    size_t remaining     = 0,
+           data_sent     = 0,
+           chunks        = 0,
+           bytes_to_send = 0;
+
+    uint8_t  dup_ack     = 0,
+             cwnd        = socket->cwnd,
+             ssthresh    = socket->ssthresh,
+           * data        = NULL;
+
+    microtcp_header_t header = {}; 
+
+    while (data_sent < length) 
+    {
+        bytes_to_send = MIN(remaining, MIN(cwnd, socket->curr_win_size));
+        chunks        = bytes_to_send / MICROTCP_MSS;
+        data          = malloc(DATA_CHUNK_SIZE);
+
+        assert(data && 
+               sizeof(data) == DATA_CHUNK_SIZE &&
+               "Error: malloc failed");
+
+        LOG_INFO("cwnd == %u"
+                 "remaining == %lu"
+                 "curr_win_size == %lu", 
+                 cwnd, remaining, socket->curr_win_size);
+
+        LOG_INFO("No. chunks %lu, bytes to send %lu",
+                 chunks, bytes_to_send );
+
+        for (size_t i = 0 ; i < chunks ; i++) {
+            data = memcpy(data, buffer, DATA_CHUNK_SIZE);
+        }
+
+        if ( bytes_to_send % MICROTCP_MSS) {
+        }
+
+        for (size_t i = 0; i < chunks ; i++) { 
+        }
+
+        remaining -= bytes_to_send;
+        data_sent += bytes_to_send;
+    }
+
     return 0;
 }
 
-ssize_t microtcp_recv(microtcp_sock_t *socket, void *buffer, size_t length,
-                      int flags) {
+ssize_t microtcp_recv(microtcp_sock_t *socket,
+                      void *buffer,
+                      size_t length,
+                      int flags)
+{
     /* TODO(gtheo): implement*/
     return 0;
 }
