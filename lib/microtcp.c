@@ -356,6 +356,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         }
 
         if ( bytes_to_send % MICROTCP_MSS) {
+
         }
 
         for (size_t i = 0; i < chunks ; i++) { 
