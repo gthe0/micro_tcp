@@ -35,21 +35,24 @@
 #include <time.h>
 #include <unistd.h>
 
-microtcp_sock_t microtcp_socket(int domain, int type, int protocol) {
-    microtcp_sock_t socket_obj;
-    memset(&socket_obj, 0, sizeof(microtcp_sock_t));
+#define MIN(a,b) (a > b) ? b : a
 
+// Socket Creation
+microtcp_sock_t microtcp_socket(int domain, 
+                                int type,
+                                int protocol) {
+    microtcp_sock_t socket_obj;
+
+    memset(&socket_obj, 0, sizeof(microtcp_sock_t));
     srand(time(NULL));
     socket_obj.seq_number = rand();
 
-    if ((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-        perror("Socket could not be opened.");
-        exit(EXIT_FAILURE);
-    }
-
+    EXIT_IF_ERROR((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1,
+                  "Socket could not be opened.");
     return (socket_obj);
 }
 
+// Bind socket to a port
 int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
                   socklen_t address_len) {
     /* If something is not initialized we can return -1 */
@@ -64,8 +67,7 @@ int microtcp_bind(microtcp_sock_t *socket, const struct sockaddr *address,
     return 0;
 }
 
-
-
+// TODO(gtheo): Needs refactoring
 int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
                      socklen_t address_len) {
     /* If something is not initialized we can return -1 */
@@ -129,7 +131,7 @@ int microtcp_connect(microtcp_sock_t *socket, const struct sockaddr *address,
 }
 
 
-
+// TODO(gtheo): Needs refactoring
 int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                     socklen_t address_len) {
     /* If something is not initialized we can return -1 */
@@ -209,6 +211,8 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
  *      - Only the client can initiate the connection termination process
  * 
  * NOTE: In this version @param how is not used
+ *
+ * TODO(gtheo): Needs refactoring
  */
 int microtcp_shutdown(microtcp_sock_t *socket, int how) { 
     

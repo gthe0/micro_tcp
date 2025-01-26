@@ -26,10 +26,9 @@
     microtcp_header_new(seq_number,ack_number,(FINALIZE_CTRL),\
                         MICROTCP_WIN_SIZE ,0,0,0,0,0)
 
-
 // Error return
-#define CHECK_ERROR(check, message, ...)\
-    if(check){}else{LOG_ERROR(message, ##__VA_ARGS__); return EXIT_FAILURE;}
+#define EXIT_IF_ERROR(check, message, ...)\
+    if(check){}else{LOG_ERROR(message, ##__VA_ARGS__); exit(EXIT_FAILURE);}
 
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */
