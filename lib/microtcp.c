@@ -49,7 +49,11 @@ microtcp_sock_t microtcp_socket(int domain,
     srand(time(NULL));
     socket_obj.seq_number = rand();
 
-    EXIT_IF_ERROR((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1, "Socket could not be opened.");
+    if((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+    {
+        LOG_ERROR("Socket could not be opened.");
+        exit(MICROTCP_ERROR);
+    }
 
     return (socket_obj);
 }
@@ -340,7 +344,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         data          = malloc(DATA_CHUNK_SIZE);
 
         assert(data && 
-               sizeof(data) == DATA_CHUNK_SIZE &&
+               (long unsigned)sizeof(data) == DATA_CHUNK_SIZE &&
                "Error: malloc failed");
 
         LOG_INFO("cwnd == %u"

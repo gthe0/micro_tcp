@@ -25,10 +25,6 @@
 #define NEW_FINALIZE_HEADER(seq_number,ack_number)\
     NEW_HEADER(seq_number, ack_number, (FINALIZE_CTRL), 0, 0)
 
-// Error return
-#define EXIT_IF_ERROR(check, message, ...)\
-    if(check){}else{LOG_ERROR(message, ##__VA_ARGS__); exit(MICROTCP_ERROR);}
-
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */
   uint32_t ack_number,          /**< ACK number */
