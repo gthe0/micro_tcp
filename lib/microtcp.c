@@ -349,7 +349,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                (long unsigned)sizeof(data) == DATA_CHUNK_SIZE &&
                "Error: malloc failed");
 
-        LOG_INFO("cwnd == %u"
+        LOG_INFO("cwnd == %lu"
                  "remaining == %lu"
                  "curr_win_size == %lu", 
                  cwnd, remaining, socket->curr_win_size);
@@ -364,9 +364,27 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                      "Data to send from beggining of buffer == %p",
                      i, socket->dest_address, buffer + (DATA_CHUNK_SIZE * i));
 
-            memcpy(data, 
-                   buffer + (DATA_CHUNK_SIZE * i),
-                   DATA_CHUNK_SIZE);
+            header = NEW_HEADER(socket->seq_number + (MICROTCP_MSS),
+                                socket->ack_number,
+                                0,
+                                MICROTCP_MSS,
+                                0);
+
+            header.checksum = crc32(data, sizeof(header));
+            header.checksum = update_crc32(header.checksum, 
+                                           buffer + (MICROTCP_MSS * i),
+                                           MICROTCP_MSS);
+
+            LOG_INFO("The checksum is %u", header.checksum);
+
+            memcpy(data,
+                  (uint8_t*)&header,
+                   sizeof(header));
+
+            memcpy(data   + sizeof(header),
+                   buffer + (MICROTCP_MSS * i),
+                   MICROTCP_MSS);
+
 
             sendto(socket->sd,
                    data,
@@ -376,7 +394,8 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                    socket->dest_address_len);
         }
 
-        if ( bytes_to_send % MICROTCP_MSS) {
+        if (bytes_to_send % MICROTCP_MSS) {
+        
         }
 
         for (size_t i = 0; i < chunks ; i++) { 
