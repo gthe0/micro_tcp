@@ -364,11 +364,14 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                      "Data to send from beggining of buffer == %p",
                      i, socket->dest_address, buffer + (DATA_CHUNK_SIZE * i));
 
-            header = NEW_HEADER(socket->seq_number + (MICROTCP_MSS),
+            header = NEW_HEADER(socket->seq_number + (i * MICROTCP_MSS),
                                 socket->ack_number,
                                 0,
                                 MICROTCP_MSS,
                                 0);
+
+            LOG_INFO("Seq number %lu",
+                     socket->seq_number + (i * MICROTCP_MSS));
 
             header.checksum = crc32(data, sizeof(header));
             header.checksum = update_crc32(header.checksum, 
@@ -385,7 +388,6 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                    buffer + (MICROTCP_MSS * i),
                    MICROTCP_MSS);
 
-
             sendto(socket->sd,
                    data,
                    DATA_CHUNK_SIZE,
@@ -395,10 +397,54 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         }
 
         if (bytes_to_send % MICROTCP_MSS) {
-        
+
+            size_t data_sz  = (bytes_to_send % MICROTCP_MSS);
+            size_t chunk_sz =  data_sz + sizeof(microtcp_header_t);
+
+            free(data);
+            data = malloc(chunk_sz);
+            
+            assert(data && 
+                  (long unsigned)sizeof(data) == chunk_sz &&
+                  "Error: malloc failed");
+
+            header = NEW_HEADER(socket->seq_number + (chunks * MICROTCP_MSS),
+                                socket->ack_number,
+                                0,
+                                data_sz,
+                                0);
+
+            LOG_INFO("Seq number %lu",
+                     socket->seq_number + (chunks * MICROTCP_MSS));
+
+            header.checksum = crc32(data, sizeof(header));
+            header.checksum = update_crc32(header.checksum, 
+                                           buffer + (MICROTCP_MSS * chunks),
+                                           data_sz);
+
+            LOG_INFO("The checksum is %u", header.checksum);
+
+            memcpy(data,
+                  (uint8_t*)&header,
+                   sizeof(header));
+
+            memcpy(data   + sizeof(header),
+                   buffer + (data_sz * chunks),
+                   data_sz);
+
+            sendto(socket->sd,
+                   data,
+                   chunk_sz,
+                   flags,
+                   socket->dest_address,
+                   socket->dest_address_len);
+
+            chunks++;
+            LOG_INFO("Chunk no %lu", chunks);
         }
 
         for (size_t i = 0; i < chunks ; i++) { 
+
         }
 
         remaining -= bytes_to_send;
