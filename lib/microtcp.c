@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MIN(a,b) ((a > b) ? b : a)
+#define MIN(a,b) ((a) > (b) ? (b) : (a))
 
 #define DATA_CHUNK_SIZE (sizeof(uint8_t) * (MICROTCP_MSS + sizeof(microtcp_header_t)))
 
@@ -325,17 +325,19 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                       size_t length,
                       int flags)
 {
-    size_t remaining     = 0,
-           data_sent     = 0,
-           chunks        = 0,
-           bytes_to_send = 0;
+    size_t remaining      = 0,
+           data_sent      = 0,
+           chunks         = 0,
+           bytes_to_send  = 0,
+           cwnd           = socket->cwnd,
+           ssthresh       = socket->ssthresh;
 
-    uint8_t  dup_ack     = 0,
-             cwnd        = socket->cwnd,
-             ssthresh    = socket->ssthresh,
-           * data        = NULL;
+    uint8_t  dup_ack      = 0,
+           * data         = NULL;
+
 
     microtcp_header_t header = {}; 
+    LOG_INFO("Microtcp_send flags == %d", flags);
 
     while (data_sent < length) 
     {
@@ -356,11 +358,25 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                  chunks, bytes_to_send );
 
         for (size_t i = 0 ; i < chunks ; i++) {
-            data = memcpy(data, buffer, DATA_CHUNK_SIZE);
+
+            LOG_INFO("Chunk no %lu\n"
+                     "dest. address == %p"
+                     "Data to send from beggining of buffer == %p",
+                     i, socket->dest_address, buffer + (DATA_CHUNK_SIZE * i));
+
+            memcpy(data, 
+                   buffer + (DATA_CHUNK_SIZE * i),
+                   DATA_CHUNK_SIZE);
+
+            sendto(socket->sd,
+                   data,
+                   DATA_CHUNK_SIZE,
+                   flags,
+                   socket->dest_address,
+                   socket->dest_address_len);
         }
 
         if ( bytes_to_send % MICROTCP_MSS) {
-
         }
 
         for (size_t i = 0; i < chunks ; i++) { 
@@ -368,6 +384,8 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
         remaining -= bytes_to_send;
         data_sent += bytes_to_send;
+
+        free(data);
     }
 
     return 0;

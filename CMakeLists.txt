@@ -19,16 +19,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-cmake_minimum_required (VERSION 2.6)
+cmake_minimum_required (VERSION 2.6...3.1)
 project (microtcp C CXX)
 
 # Enable C++11 support
-if (CMAKE_VERSION VERSION_LESS "3.1")
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-else ()
-	set (CMAKE_CXX_STANDARD 11)
-    set (CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database (usefull for LSP (clangd))
-endif()
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set (CMAKE_EXPORT_COMPILE_COMMANDS ON) # Export compilation database (usefull for LSP (clangd))
 
 # Enable all warnings during compilation, hoping that this will be 
 # helpful for the students :)

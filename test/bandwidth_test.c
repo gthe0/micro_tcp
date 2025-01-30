@@ -136,7 +136,7 @@ server_tcp (uint16_t listen_port, const char *file)
   while ((received = recv (accepted, buffer, CHUNK_SIZE, 0)) > 0) {
     written = fwrite (buffer, sizeof(uint8_t), received, fp);
     total_bytes += received;
-    if (written * sizeof(uint8_t) != received) {
+    if (written * sizeof(uint8_t) != (size_t)received) {
       printf ("Failed to write to the file the"
               " amount of data received from the network.\n");
       shutdown (accepted, SHUT_RDWR);
@@ -230,7 +230,7 @@ client_tcp (const char *serverip, uint16_t server_port, const char *file)
     }
 
     data_sent = send (sock, buffer, read_items * sizeof(uint8_t), 0);
-    if (data_sent != read_items * sizeof(uint8_t)) {
+    if ((size_t)data_sent != read_items * sizeof(uint8_t)) {
       printf ("Failed to send the"
               " amount of data read from the file.\n");
       shutdown (sock, SHUT_RDWR);
@@ -260,8 +260,8 @@ client_microtcp (const char *serverip, uint16_t server_port, const char *file)
 int
 main (int argc, char **argv)
 {
-  int opt;
-  int port;
+  int opt  = 0;
+  int port = 0;
   int exit_code = 0;
   char *filestr = NULL;
   char *ipstr = NULL;
