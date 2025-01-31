@@ -12,18 +12,21 @@
 #define FINALIZE_CTRL (FIN_BIT | ACK_BIT)
 
 #define MICROTCP_ERROR -1
-#define NEW_HEADER(seq_number, ack_number, control, data_len, checksum)     \
-    microtcp_header_new(seq_number, ack_number, control, MICROTCP_WIN_SIZE, \
+#define NEW_HEADER(seq_number, ack_number, control, win_sz, data_len, checksum)     \
+    microtcp_header_new(seq_number, ack_number, control, win_sz, \
                         data_len, 0, 0, 0, checksum)
 
 #define NEW_CONNECT_HEADER(seq_number,ack_number)\
-    NEW_HEADER(seq_number, ack_number, (CONNECT_CTRL), 0, 0)
+    NEW_HEADER(seq_number, ack_number, (CONNECT_CTRL),\
+               MICROTCP_WIN_SIZE, 0, 0)
 
 #define NEW_ACCEPT_HEADER(seq_number,ack_number)\
-    NEW_HEADER(seq_number, ack_number, (ACCEPT_CTRL), 0, 0)
+    NEW_HEADER(seq_number, ack_number, (ACCEPT_CTRL),\
+               MICROTCP_WIN_SIZE, 0, 0)
 
 #define NEW_FINALIZE_HEADER(seq_number,ack_number)\
-    NEW_HEADER(seq_number, ack_number, (FINALIZE_CTRL), 0, 0)
+    NEW_HEADER(seq_number, ack_number, (FINALIZE_CTRL),\
+               MICROTCP_WIN_SIZE,0, 0)
 
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */

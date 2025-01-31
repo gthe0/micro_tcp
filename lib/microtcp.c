@@ -37,7 +37,8 @@
 
 #define MIN(a,b) ((a) > (b) ? (b) : (a))
 
-#define DATA_CHUNK_SIZE (sizeof(uint8_t) * (MICROTCP_MSS + sizeof(microtcp_header_t)))
+#define MICROTCP_HEADER_SZ (sizeof(microtcp_header_t))
+#define DATA_CHUNK_SIZE (sizeof(uint8_t) * (MICROTCP_MSS + MICROTCP_HEADER_SZ))
 
 // Socket Creation
 microtcp_sock_t microtcp_socket(int domain, 
@@ -366,6 +367,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
             header = NEW_HEADER(socket->seq_number + (i * MICROTCP_MSS),
                                 socket->ack_number,
+                                MICROTCP_WIN_SIZE,
                                 0,
                                 MICROTCP_MSS,
                                 0);
@@ -411,6 +413,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             header = NEW_HEADER(socket->seq_number + (chunks * MICROTCP_MSS),
                                 socket->ack_number,
                                 0,
+                                MICROTCP_WIN_SIZE,
                                 data_sz,
                                 0);
 
@@ -443,14 +446,15 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             LOG_INFO("Chunk no %lu", chunks);
         }
 
-        for (size_t i = 0; i < chunks ; i++) { 
+        free(data);
 
+        for (size_t i = 0; i < chunks ; i++) {
+            
         }
 
         remaining -= bytes_to_send;
         data_sent += bytes_to_send;
 
-        free(data);
     }
 
     return 0;
@@ -461,6 +465,5 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
                       size_t length,
                       int flags)
 {
-    /* TODO(gtheo): implement*/
     return 0;
 }

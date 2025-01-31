@@ -25,15 +25,15 @@ microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header) {
     microtcp_header_t ntoh_header = {0};
     if (header == NULL) return ntoh_header;
 
-    ntoh_header.seq_number = ntohl(header->seq_number);
-    ntoh_header.ack_number = ntohl(header->ack_number);
-    ntoh_header.control = ntohs(header->control);
-    ntoh_header.window = ntohs(header->window);
-    ntoh_header.data_len = ntohl(header->data_len);
+    ntoh_header.seq_number  = ntohl(header->seq_number);
+    ntoh_header.ack_number  = ntohl(header->ack_number);
+    ntoh_header.control     = ntohs(header->control);
+    ntoh_header.window      = ntohs(header->window);
+    ntoh_header.data_len    = ntohl(header->data_len);
     ntoh_header.future_use0 = ntohl(header->future_use0);
     ntoh_header.future_use1 = ntohl(header->future_use1);
     ntoh_header.future_use2 = ntohl(header->future_use2);
-    ntoh_header.checksum = ntohl(header->checksum);
+    ntoh_header.checksum    = ntohl(header->checksum);
 
     return ntoh_header;
 }
@@ -42,15 +42,15 @@ microtcp_header_t microtcp_header_hton(microtcp_header_t *header) {
     microtcp_header_t hton_header = {0};
     if (header == NULL) return hton_header;
 
-    hton_header.seq_number = htonl(header->seq_number);
-    hton_header.ack_number = htonl(header->ack_number);
-    hton_header.control = htons(header->control);
-    hton_header.window = htons(header->window);
-    hton_header.data_len = htonl(header->data_len);
+    hton_header.seq_number  = htonl(header->seq_number);
+    hton_header.ack_number  = htonl(header->ack_number);
+    hton_header.control     = htons(header->control);
+    hton_header.window      = htons(header->window);
+    hton_header.data_len    = htonl(header->data_len);
     hton_header.future_use0 = htonl(header->future_use0);
     hton_header.future_use1 = htonl(header->future_use1);
     hton_header.future_use2 = htonl(header->future_use2);
-    hton_header.checksum = htonl(header->checksum);
+    hton_header.checksum    = htonl(header->checksum);
 
     return hton_header;
 }
