@@ -45,14 +45,32 @@ microtcp_sock_t microtcp_socket(int domain,
                                 int type,
                                 int protocol) {
     microtcp_sock_t socket_obj;
+    int32_t optval = 1;
 
     memset(&socket_obj, 0, sizeof(microtcp_sock_t));
     srand(time(NULL));
     socket_obj.seq_number = rand();
 
+    // Congestion control related stuff
+    socket_obj.cwnd     = MICROTCP_INIT_CWND;
+    socket_obj.ssthresh = MICROTCP_INIT_SSTHRESH;
+
     CHECK_ERROR_STMT((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) != MICROTCP_ERROR,
                      socket_obj.state = INVALID,
                      "Socket could not be opened.");
+
+    struct timeval timeout = {
+        .tv_sec = 0,
+        .tv_usec = MICROTCP_ACK_TIMEOUT_US
+    };
+
+    CHECK_ERROR_STMT((setsockopt(socket_obj.sd, SOL_SOCKET, SO_RCVTIMEO,
+                      &timeout, sizeof(struct timeval)) >= 0),,
+                     "TimeInterval failed");
+
+    CHECK_ERROR_STMT(setsockopt(socket_obj.sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) >= 0, 
+                     socket_obj.state = INVALID, 
+                     "Setting SO_REUSEADDR failed.");
 
     return (socket_obj);
 }
@@ -111,12 +129,16 @@ int microtcp_connect(microtcp_sock_t *socket,
     rcv_header.checksum =
         crc32((uint8_t *)&rcv_header, sizeof(microtcp_header_t));
 
+    LOG_INFO("Connect-> rcv_header.checksum == %u, checksum == %u",
+             rcv_header.checksum, checksum);
+
     CHECK_ERROR(
         checksum == rcv_header.checksum && rcv_header.control == SYN_ACK,
         "Connect-> Error during transmition");
 
-    socket->ack_number = rcv_header.seq_number + 1;
-    socket->seq_number = rcv_header.ack_number;
+    socket->ack_number    = rcv_header.seq_number + 1;
+    socket->seq_number    = rcv_header.ack_number;
+    socket->init_win_size = rcv_header.window;
 
     header.ack_number = socket->ack_number;
     header.seq_number = socket->seq_number;
@@ -262,7 +284,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
 
     if (checksum != receive_header.checksum ||
         receive_header.control != ACK_BIT) {
-        return -1;
+        return MICROTCP_ERROR;
     }
 
     /* ACK = M + 1, Seq = N + 1 */
@@ -274,8 +296,8 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     /* Receive FIN-ACK message from server */
     memset(&receive_header, 0, sizeof(microtcp_header_t));
     if (recv(socket->sd, &receive_header, sizeof(microtcp_header_t),
-             MSG_WAITALL) == -1) {
-        return -1;
+             MSG_WAITALL) == MICROTCP_ERROR) {
+        return MICROTCP_ERROR;
     }
     microtcp_header_ntoh(&receive_header);
 
@@ -287,7 +309,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
 
     if (checksum != receive_header.checksum ||
         receive_header.control != FIN_ACK) {
-        return -1;
+        return MICROTCP_ERROR;
     }
 
     /* ACK: Y + 1, SEQ: N + 1 */
@@ -304,8 +326,8 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
 
     microtcp_header_hton(&finalize_header);
     if (send(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0) ==
-        -1) {
-        return -1;
+        MICROTCP_ERROR) {
+        return MICROTCP_ERROR;
     }
 
     close(socket->sd);
@@ -322,6 +344,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     size_t remaining      = 0,
            data_sent      = 0,
            chunks         = 0,
+           bytes_send     = 0,
            bytes_to_send  = 0,
            cwnd           = socket->cwnd,
            ssthresh       = socket->ssthresh;
@@ -330,30 +353,18 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
            * data         = NULL;
     
     microtcp_header_t header  = {}; 
-    struct timeval    timeout = {};
-
-    timeout.tv_sec  = 0;
-    timeout.tv_usec = MICROTCP_ACK_TIMEOUT_US;
-
-    if (setsockopt(socket->sd, 
-                   SOL_SOCKET,
-                   SO_RCVTIMEO,
-                   &timeout,
-                   sizeof(timeout)) < 0)
-    {
-        LOG_ERROR("setsockopt failed! ");
-        return (MICROTCP_ERROR);
-    }
 
     LOG_INFO("Microtcp_send flags == %d", flags);
     while (data_sent < length) 
     {
-        bytes_to_send = MIN(remaining, MIN(cwnd, socket->curr_win_size));
+        bytes_to_send = MIN(remaining, socket->curr_win_size);
+        bytes_to_send = MIN(bytes_to_send, cwnd);
+
         chunks        = bytes_to_send / MICROTCP_MSS;
         data          = malloc(MICROTCP_DATA_CHUNK_SIZE);
 
         assert(data && 
-              (long unsigned)sizeof(data) == MICROTCP_DATA_CHUNK_SIZE &&
+              (ulong)sizeof(data) == MICROTCP_DATA_CHUNK_SIZE &&
                "Error: malloc failed");
 
         LOG_INFO("cwnd == %lu "
@@ -394,10 +405,15 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                    buffer + (MICROTCP_MSS * i),
                    MICROTCP_MSS);
 
-            CHECK_ERROR(send(socket->sd,
-                             data,
-                             MICROTCP_DATA_CHUNK_SIZE, 
-                             flags) == MICROTCP_ERROR); 
+            bytes_send = send(socket->sd,
+                              data,
+                              MICROTCP_DATA_CHUNK_SIZE, 
+                              flags); 
+
+            CHECK_ERROR(bytes_send != (ulong)MICROTCP_ERROR);
+
+            socket->bytes_send += bytes_send;
+            socket->packets_send++;
         }
 
         if (bytes_to_send % MICROTCP_MSS) {
@@ -432,20 +448,39 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                    buffer + (data_sz * chunks),
                    data_sz);
 
-            CHECK_ERROR(send(socket->sd,
-                        data,
-                        chunk_sz,
-                        flags) != MICROTCP_ERROR);
+            bytes_send = send(socket->sd,
+                              data,
+                              chunk_sz,
+                              flags);
+
+
+            CHECK_ERROR(bytes_send != (ulong)MICROTCP_ERROR);
+
+            socket->bytes_send += bytes_send;
+            socket->packets_send++;
 
             chunks++;
             LOG_INFO("Chunk no %lu", chunks);
         }
 
-        free(data);
-
         for (size_t i = 0; i < chunks ; i++) {
+
+            ssize_t bytes_received = 0;
+            bytes_received         = recv(socket->sd,
+                                          data,
+                                          MICROTCP_DATA_CHUNK_SIZE,
+                                          0);
+
+            if(bytes_received == MICROTCP_ERROR)
+            {
+                break;
+            }
+
+            
+
         }
 
+        free(data);
         remaining -= bytes_to_send;
         data_sent += bytes_to_send;
     }
@@ -457,6 +492,6 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
                       void *buffer,
                       size_t length,
                       int flags)
-{ 
+{
     return 0;
 }
