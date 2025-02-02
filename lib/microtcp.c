@@ -37,8 +37,8 @@
 
 #define MIN(a,b) ((a) > (b) ? (b) : (a))
 
-#define MICROTCP_HEADER_SZ (sizeof(microtcp_header_t))
-#define DATA_CHUNK_SIZE (sizeof(uint8_t) * (MICROTCP_MSS + MICROTCP_HEADER_SZ))
+#define MICROTCP_HEADER_SZ       (sizeof(microtcp_header_t))
+#define MICROTCP_DATA_CHUNK_SIZE ((MICROTCP_MSS) + (MICROTCP_HEADER_SZ))
 
 // Socket Creation
 microtcp_sock_t microtcp_socket(int domain, 
@@ -112,7 +112,7 @@ int microtcp_connect(microtcp_sock_t *socket,
         crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
 
     if (checksum != receive_header.checksum ||
-        receive_header.control != ACCEPT_CTRL) {
+        receive_header.control != SYN_ACK) {
         return -1;
     }
 
@@ -166,7 +166,7 @@ int microtcp_accept(microtcp_sock_t *socket,
         crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
 
     if (checksum != receive_header.checksum ||
-        receive_header.control != CONNECT_CTRL) {
+        receive_header.control != SYN_BIT) {
         return -1;
     }
 
@@ -293,7 +293,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how)
         crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
 
     if (checksum != receive_header.checksum ||
-        receive_header.control != FINALIZE_CTRL) {
+        receive_header.control != FIN_ACK) {
         return -1;
     }
 
@@ -344,10 +344,10 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     {
         bytes_to_send = MIN(remaining, MIN(cwnd, socket->curr_win_size));
         chunks        = bytes_to_send / MICROTCP_MSS;
-        data          = malloc(DATA_CHUNK_SIZE);
+        data          = malloc(MICROTCP_DATA_CHUNK_SIZE);
 
         assert(data && 
-               (long unsigned)sizeof(data) == DATA_CHUNK_SIZE &&
+              (long unsigned)sizeof(data) == MICROTCP_DATA_CHUNK_SIZE &&
                "Error: malloc failed");
 
         LOG_INFO("cwnd == %lu"
@@ -363,7 +363,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             LOG_INFO("Chunk no %lu\n"
                      "dest. address == %p"
                      "Data to send from beggining of buffer == %p",
-                     i, socket->dest_address, buffer + (DATA_CHUNK_SIZE * i));
+                     i, socket->dest_address, buffer + (MICROTCP_DATA_CHUNK_SIZE * i));
 
             header = NEW_HEADER(socket->seq_number + (i * MICROTCP_MSS),
                                 socket->ack_number,
@@ -392,7 +392,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
             sendto(socket->sd,
                    data,
-                   DATA_CHUNK_SIZE,
+                   MICROTCP_DATA_CHUNK_SIZE,
                    flags,
                    socket->dest_address,
                    socket->dest_address_len);
@@ -449,7 +449,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         free(data);
 
         for (size_t i = 0; i < chunks ; i++) {
-            
+
         }
 
         remaining -= bytes_to_send;
