@@ -27,6 +27,29 @@
     NEW_HEADER(seq_number, ack_number, (FIN_ACK),\
                MICROTCP_WIN_SIZE,0, 0)
 
+
+// Error checking
+#define CHECK_IMPL(check, level, body, ...)\
+    if(check){}else{ LOG_##level(__VA_ARGS__); body;}
+
+#define CHECK_WARN_STMT(check, stmt, ...)\
+    CHECK_IMPL(check, WARN, stmt, __VA_ARGS__)
+
+#define CHECK_INFO_STMT(check, stmt,...)\
+    CHECK_IMPL(check, INFO, stmt, __VA_ARGS__)
+
+#define CHECK_ERROR_STMT(check, stmt,...)\
+    CHECK_IMPL(check, ERROR, stmt, __VA_ARGS__)
+
+#define CHECK_WARN(check, ...)\
+    CHECK_WARN_STMT(check, , __VA_ARGS__)
+
+#define CHECK_INFO(check, ...)\
+    CHECK_INFO_STMT(check, , __VA_ARGS__)
+
+#define CHECK_ERROR(check, ...)\
+    CHECK_ERROR_STMT(check, return MICROTCP_ERROR, __VA_ARGS__)
+
 microtcp_header_t microtcp_header_new(
   uint32_t seq_number,          /**< Sequence number */
   uint32_t ack_number,          /**< ACK number */
@@ -39,6 +62,6 @@ microtcp_header_t microtcp_header_new(
   uint32_t checksum             /**< CRC-32 checksum, see crc32() in utils folder */
 );
 
-microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header);
-microtcp_header_t microtcp_header_hton(microtcp_header_t *header);
+int32_t microtcp_header_ntoh(microtcp_header_t *header);
+int32_t microtcp_header_hton(microtcp_header_t *header);
 

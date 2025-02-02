@@ -21,36 +21,36 @@ microtcp_header_t microtcp_header_new(
     return (new_header);
 }
 
-microtcp_header_t microtcp_header_ntoh(microtcp_header_t *header) {
-    microtcp_header_t ntoh_header = {0};
-    if (header == NULL) return ntoh_header;
+int32_t microtcp_header_ntoh(microtcp_header_t *header) {
 
-    ntoh_header.seq_number  = ntohl(header->seq_number);
-    ntoh_header.ack_number  = ntohl(header->ack_number);
-    ntoh_header.control     = ntohs(header->control);
-    ntoh_header.window      = ntohs(header->window);
-    ntoh_header.data_len    = ntohl(header->data_len);
-    ntoh_header.future_use0 = ntohl(header->future_use0);
-    ntoh_header.future_use1 = ntohl(header->future_use1);
-    ntoh_header.future_use2 = ntohl(header->future_use2);
-    ntoh_header.checksum    = ntohl(header->checksum);
+    if (header == NULL) return MICROTCP_ERROR;
 
-    return ntoh_header;
+    header->seq_number  = ntohl(header->seq_number);
+    header->ack_number  = ntohl(header->ack_number);
+    header->control     = ntohs(header->control);
+    header->window      = ntohs(header->window);
+    header->data_len    = ntohl(header->data_len);
+    header->future_use0 = ntohl(header->future_use0);
+    header->future_use1 = ntohl(header->future_use1);
+    header->future_use2 = ntohl(header->future_use2);
+    header->checksum    = ntohl(header->checksum);
+
+    return 0;
 }
 
-microtcp_header_t microtcp_header_hton(microtcp_header_t *header) {
-    microtcp_header_t hton_header = {0};
-    if (header == NULL) return hton_header;
+int32_t microtcp_header_hton(microtcp_header_t *header) {
 
-    hton_header.seq_number  = htonl(header->seq_number);
-    hton_header.ack_number  = htonl(header->ack_number);
-    hton_header.control     = htons(header->control);
-    hton_header.window      = htons(header->window);
-    hton_header.data_len    = htonl(header->data_len);
-    hton_header.future_use0 = htonl(header->future_use0);
-    hton_header.future_use1 = htonl(header->future_use1);
-    hton_header.future_use2 = htonl(header->future_use2);
-    hton_header.checksum    = htonl(header->checksum);
+    if (header == NULL) return MICROTCP_ERROR;
 
-    return hton_header;
+    header->seq_number  = htonl(header->seq_number);
+    header->ack_number  = htonl(header->ack_number);
+    header->control     = htons(header->control);
+    header->window      = htons(header->window);
+    header->data_len    = htonl(header->data_len);
+    header->future_use0 = htonl(header->future_use0);
+    header->future_use1 = htonl(header->future_use1);
+    header->future_use2 = htonl(header->future_use2);
+    header->checksum    = htonl(header->checksum);
+
+    return 0;
 }
