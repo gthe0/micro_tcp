@@ -189,7 +189,8 @@ int server_microtcp(uint16_t port, const char *filename)
 
     if (microtcp_bind(&sock, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
         perror("microtcp_bind");
-        goto cleanup;
+        fclose(fp);
+        return -EXIT_FAILURE;
     }
 
     printf("microTCP Server listening on port %d...\n", port);
@@ -198,7 +199,9 @@ int server_microtcp(uint16_t port, const char *filename)
     
     if (microtcp_accept(&sock, &client_addr, addr_len) == -1) {
         perror("microtcp_accept");
-        goto cleanup;
+        microtcp_shutdown(&sock, SHUT_RDWR);
+        fclose(fp);
+        return -EXIT_FAILURE;
     }
 
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -210,7 +213,6 @@ int server_microtcp(uint16_t port, const char *filename)
 
     print_statistics(total, start, end);
 
-cleanup:
     microtcp_shutdown(&sock, SHUT_RDWR);
     microtcp_shutdown(&accepted_sock, SHUT_RDWR);
     fclose(fp);
@@ -329,20 +331,23 @@ int client_microtcp(const char *server_ip, uint16_t port, const char *filename)
 
     if (microtcp_connect(&sock, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
         perror("microtcp_connect");
-        goto cleanup;
+        microtcp_shutdown(&sock, SHUT_RDWR);
+        fclose(fp);
+        return -EXIT_FAILURE;
     }
 
     printf("Sending data via microTCP to %s:%d...\n", server_ip, port);
     while ((read = fread(buffer, 1, CHUNK_SIZE, fp)) > 0) {
         if (microtcp_send(&sock, buffer, read, 0) != (ssize_t)read) {
             perror("microtcp_send");
-            goto cleanup;
+            microtcp_shutdown(&sock, SHUT_RDWR);
+            fclose(fp);
+            return -EXIT_FAILURE;
         }
     }
 
     printf("microTCP transfer completed.\n");
 
-cleanup:
     microtcp_shutdown(&sock, SHUT_RDWR);
     fclose(fp);
     return 0;
