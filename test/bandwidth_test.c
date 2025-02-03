@@ -392,8 +392,6 @@ main (int argc, char **argv)
           exit(EXIT_FAILURE);
         }
 
-        free(filestr); // free the optarg copy
-
         if ((filestr = strdup(abs_path)) == NULL) {
           perror("strdup failed.");
           exit(EXIT_FAILURE);
