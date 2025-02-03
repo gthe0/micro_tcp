@@ -132,9 +132,9 @@ int microtcp_connect(microtcp_sock_t *socket,
     LOG_INFO("Connect-> rcv_header.checksum == %u, checksum == %u",
              rcv_header.checksum, checksum);
 
-    CHECK_ERROR(
-        checksum == rcv_header.checksum && rcv_header.control == SYN_ACK,
-        "Connect-> Error during transmition");
+    CHECK_ERROR(checksum == rcv_header.checksum &&
+                rcv_header.control == SYN_ACK,
+                "Connect-> Error during transmition");
 
     socket->ack_number    = rcv_header.seq_number + 1;
     socket->seq_number    = rcv_header.ack_number;
@@ -336,6 +336,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
     return 0;
 }
 
+
 ssize_t microtcp_send(microtcp_sock_t *socket,
                       const void *buffer,
                       size_t length,
@@ -495,21 +496,34 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     return 0;
 }
 
+
 ssize_t microtcp_recv(microtcp_sock_t *socket,
                       void *buffer,
                       size_t length,
                       int flags)
 {
+    microtcp_header_t send_header = {0};
     microtcp_header_t recv_header = {0};
     
+    size_t   curr_buff_length  = 0;
+
     ssize_t   bytes_recvd = 0;
+    ssize_t   bytes_sent  = 0;
+
     uint8_t*  data        = malloc(MICROTCP_DATA_CHUNK_SIZE);
 
     CHECK_ERROR(data, "Malloc Failed");
 
+    // If the length is negative, return control to the user
+    if (length <= 0)
+    {
+        free(data); 
+        LOG_ERROR("Passed length is negative: %lu", length);
+        return MICROTCP_ERROR;
+    }
 
     //TODO(gtheo): Do a polling implementation
-    do
+    while(curr_buff_length < length)
     {
         bytes_recvd = recv(socket->sd,
                            data,
@@ -518,6 +532,8 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
         LOG_INFO("Receive-> We received %lu", bytes_recvd);
 
+        // NOTE(gtheo): Do not know if it is the correct
+        // way to handle this
         if (bytes_recvd == MICROTCP_ERROR) continue;
 
         memcpy(&recv_header, data, MICROTCP_HEADER_SZ);
@@ -525,8 +541,11 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
         uint32_t checksum = recv_header.checksum;
         recv_header.checksum = 0;
+
         memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
         recv_header.checksum = crc32(data, MICROTCP_DATA_CHUNK_SIZE);
+        memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
+
 
         if(recv_header.checksum == checksum)
         {
@@ -535,24 +554,70 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
             socket->packets_lost ++;
             socket->bytes_lost   +=  recv_header.data_len;
+            // FIXME(gtheo): Will see if it works
+            // This is not correct !!!
             continue;
         }
 
-        socket->packets_received ++;
-        socket->bytes_received   += recv_header.data_len;
+        // TODO(gtheo): Implement error handling logic
+        //              Send ACK but
+        if(socket->ack_number == recv_header.seq_number)
+        {
+            socket->ack_number += recv_header.data_len;
 
-    }while(0);
+            memcpy(socket->recvbuf + socket->buf_fill_level, data + MICROTCP_HEADER_SZ , recv_header.data_len);
+            socket->buf_fill_level += recv_header.data_len;
+            socket->curr_win_size  = socket->init_win_size - socket->buf_fill_level;
+
+            socket->packets_received ++;
+            socket->bytes_received   += recv_header.data_len;
+        }
+        else
+        {
+            socket->packets_lost ++;
+            socket->bytes_lost   += recv_header.data_len;
+        }
+
+        // TODO(gtheo): Send ACK
+        send_header = NEW_HEADER(socket->seq_number,
+                                 socket->ack_number,
+                                 ACK_BIT,
+                                 socket->curr_win_size,
+                                 0,
+                                 0);
+        
+        bytes_sent = send(socket->sd,
+                          &send_header,
+                          MICROTCP_HEADER_SZ,
+                          0);
+
+        CHECK_ERROR(bytes_sent != MICROTCP_ERROR,
+                    "Send Failed");
+
+        // Increament seq number
+        socket->seq_number++;
+
+        size_t to_copy = (socket->buf_fill_level < length - curr_buff_length) ?
+                          socket->buf_fill_level : length - curr_buff_length;
+
+        memcpy(buffer + curr_buff_length, socket->recvbuf ,to_copy);
+
+        curr_buff_length += to_copy;
+        socket->buf_fill_level -= to_copy;
+
+        memmove(socket->recvbuf, socket->recvbuf + to_copy, socket->buf_fill_level);
+    }
     
     free(data);
-    return 0;
+    return curr_buff_length;
 }
 
 
 ssize_t
 microtcp_recv_fsm(microtcp_sock_t *socket,
-                      void *buffer,
-                      size_t length,
-                      int flags)
+                  void *buffer,
+                  size_t length,
+                  int flags)
 {
     return 0;
 }
