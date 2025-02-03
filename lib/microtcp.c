@@ -370,7 +370,6 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
             return MICROTCP_ERROR;
         }
 
-        close(socket->sd);
         socket->state = CLOSED;
     }
     else if(socket->state == CLOSING_BY_PEER)
@@ -423,7 +422,6 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         socket->ack_number = receive_header.seq_number + 1;
         socket->seq_number = receive_header.ack_number;
 
-        close(socket->sd);
         socket->state = CLOSED;
     }
 
