@@ -191,8 +191,8 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 
     // Time out interval
     struct timeval timeout = {
-        .tv_sec = 0,
-        .tv_usec = MICROTCP_ACK_TIMEOUT_US
+        .tv_sec = 10,
+        .tv_usec = 0
     };
 
     CHECK_ERROR((setsockopt(socket->sd, SOL_SOCKET, SO_RCVTIMEO,
@@ -201,8 +201,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 
     microtcp_header_t receive_header = {0};
     CHECK_ERROR(recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
-                 MSG_WAITALL, (struct sockaddr *)address,
-                 &address_len) != MICROTCP_ERROR);
+                 MSG_WAITALL, (struct sockaddr *)address, &address_len) != MICROTCP_ERROR);
 
     CHECK_ERROR(microtcp_header_ntoh(&receive_header));
 
