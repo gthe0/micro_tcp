@@ -512,6 +512,26 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             LOG_INFO("Chunk no %lu", chunks);
         }
 
+        if(bytes_to_send == 0 ||
+           socket->curr_win_size == 0)
+        {
+            LOG_INFO("Curr_win_size  %lu == %lu and chunks == %lu",
+                     bytes_to_send, socket->curr_win_size, chunks);
+            LOG_WARN("FLOW CONTROL -> curr_win_size == 0");
+
+            header = NEW_HEADER(socket->seq_number,
+                                socket->ack_number,
+                                socket->curr_win_size,
+                                0, 0, 0);
+            send(socket->sd,
+                 &header,
+                 MICROTCP_HEADER_SZ,
+                 flags);
+
+            chunks++;
+            usleep(rand()%MICROTCP_ACK_TIMEOUT_US);
+        }
+
         bytes_to_send = 0;
         for (size_t i = 0; i < chunks ; i++) {
             // TODO(gtheo): Implement packet reception logic
