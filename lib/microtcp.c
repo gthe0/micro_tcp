@@ -512,6 +512,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             LOG_INFO("Chunk no %lu", chunks);
         }
 
+        bytes_to_send = 0;
         for (size_t i = 0; i < chunks ; i++) {
             // TODO(gtheo): Implement packet reception logic
             ssize_t recv_bytes = recv(socket->sd, 
@@ -560,8 +561,10 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             {
                 if(socket->seq_number > recv_header.ack_number)
                 {
-                    bytes_to_send +=  recv_header.ack_number - socket->seq_number;
-                    socket->seq_number = recv_header.ack_number;
+                    bytes_to_send        += recv_header.ack_number - socket->seq_number;
+                    socket->seq_number    = recv_header.ack_number;
+                    socket->curr_win_size = recv_header.window;
+
                     dup_ack = 0;
 
                     if(socket->cwnd < socket->ssthresh)
