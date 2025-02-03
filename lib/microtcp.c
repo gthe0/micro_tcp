@@ -191,7 +191,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 
     // Time out interval
     struct timeval timeout = {
-        .tv_sec = 10,
+        .tv_sec = 300,
         .tv_usec = 0
     };
 
