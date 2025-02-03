@@ -341,6 +341,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                       size_t length,
                       int flags)
 {
+    microtcp_header_t header  = {}; 
     size_t remaining      = 0,
            data_sent      = 0,
            chunks         = 0,
@@ -350,23 +351,17 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
            ssthresh       = socket->ssthresh;
 
     uint8_t  dup_ack      = 0,
-           * data         = NULL;
-    
-    microtcp_header_t header  = {}; 
+           * data         = malloc(MICROTCP_DATA_CHUNK_SIZE);
 
+    assert(data && "Error: malloc failed");
     LOG_INFO("Microtcp_send flags == %d", flags);
+
     while (data_sent < length) 
     {
         bytes_to_send = MIN(remaining, socket->curr_win_size);
         bytes_to_send = MIN(bytes_to_send, cwnd);
 
         chunks        = bytes_to_send / MICROTCP_MSS;
-        data          = malloc(MICROTCP_DATA_CHUNK_SIZE);
-
-        assert(data && 
-              (ulong)sizeof(data) == MICROTCP_DATA_CHUNK_SIZE &&
-               "Error: malloc failed");
-
         LOG_INFO("cwnd == %lu "
                  "remaining == %lu "
                  "curr_win_size == %lu", 
@@ -473,11 +468,23 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
             if(bytes_received == MICROTCP_ERROR)
             {
+                socket->bytes_lost += (bytes_to_send);
+                socket->packets_lost++;
                 break;
             }
 
-            
+            bytes_to_send -= ((i + 1) == chunks) ? 
+                             (bytes_to_send % MICROTCP_MSS) :
+                              MICROTCP_MSS;
 
+            microtcp_header_t rcv_header;
+            memcpy(&rcv_header, data, MICROTCP_HEADER_SZ);
+            microtcp_header_ntoh(&rcv_header);
+
+            socket->buf_fill_level  += bytes_received;
+
+            socket->packets_received++;
+            socket->bytes_received  += bytes_received;
         }
 
         free(data);
@@ -489,6 +496,60 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 }
 
 ssize_t microtcp_recv(microtcp_sock_t *socket,
+                      void *buffer,
+                      size_t length,
+                      int flags)
+{
+    microtcp_header_t recv_header = {0};
+    
+    ssize_t   bytes_recvd = 0;
+    uint8_t*  data        = malloc(MICROTCP_DATA_CHUNK_SIZE);
+
+    CHECK_ERROR(data, "Malloc Failed");
+
+
+    //TODO(gtheo): Do a polling implementation
+    do
+    {
+        bytes_recvd = recv(socket->sd,
+                           data,
+                           MICROTCP_DATA_CHUNK_SIZE, 
+                           flags);
+
+        LOG_INFO("Receive-> We received %lu", bytes_recvd);
+
+        if (bytes_recvd == MICROTCP_ERROR) continue;
+
+        memcpy(&recv_header, data, MICROTCP_HEADER_SZ);
+        microtcp_header_ntoh(&recv_header);
+
+        uint32_t checksum = recv_header.checksum;
+        recv_header.checksum = 0;
+        memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
+        recv_header.checksum = crc32(data, MICROTCP_DATA_CHUNK_SIZE);
+
+        if(recv_header.checksum == checksum)
+        {
+            LOG_ERROR("recv_header's checksum mismatch: %u == %u", 
+                      recv_header.checksum, checksum);
+
+            socket->packets_lost ++;
+            socket->bytes_lost   +=  recv_header.data_len;
+            continue;
+        }
+
+        socket->packets_received ++;
+        socket->bytes_received   += recv_header.data_len;
+
+    }while(0);
+    
+    free(data);
+    return 0;
+}
+
+
+ssize_t
+microtcp_recv_fsm(microtcp_sock_t *socket,
                       void *buffer,
                       size_t length,
                       int flags)
