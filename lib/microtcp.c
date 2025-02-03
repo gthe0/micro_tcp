@@ -59,15 +59,6 @@ microtcp_sock_t microtcp_socket(int domain,
                      socket_obj.state = INVALID,
                      "Socket could not be opened.");
 
-    struct timeval timeout = {
-        .tv_sec = 0,
-        .tv_usec = MICROTCP_ACK_TIMEOUT_US
-    };
-
-    CHECK_ERROR_STMT((setsockopt(socket_obj.sd, SOL_SOCKET, SO_RCVTIMEO,
-                      &timeout, sizeof(struct timeval)) >= 0),,
-                     "TimeInterval failed");
-
     CHECK_ERROR_STMT(setsockopt(socket_obj.sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) >= 0, 
                      socket_obj.state = INVALID, 
                      "Setting SO_REUSEADDR failed.");
@@ -102,6 +93,16 @@ int microtcp_connect(microtcp_sock_t *socket,
     CHECK_ERROR(socket->state != INVALID,
                 "Socket was not properly initialized");
 
+    // Time out interval
+    struct timeval timeout = {
+        .tv_sec = 0,
+        .tv_usec = MICROTCP_ACK_TIMEOUT_US
+    };
+
+    CHECK_ERROR((setsockopt(socket->sd, SOL_SOCKET, SO_RCVTIMEO,
+                            &timeout, sizeof(struct timeval)) >= 0),
+                "Time Interval option failed");
+
     /* Header Creation Phase */
     microtcp_header_t rcv_header = {0};
     microtcp_header_t header =
@@ -109,17 +110,21 @@ int microtcp_connect(microtcp_sock_t *socket,
     header.checksum = crc32((uint8_t *)&header, sizeof(microtcp_header_t));
 
     LOG_INFO("Connect header checksum is %u", header.checksum);
-
     CHECK_ERROR(microtcp_header_hton(&header) != MICROTCP_ERROR);
-    CHECK_ERROR(
-        sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
-               (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
-        "Connect-> First send failed in connect!");
 
-    CHECK_ERROR(recvfrom(socket->sd, &rcv_header, sizeof(microtcp_header_t),
-                         MSG_WAITALL, (struct sockaddr *)address,
-                         &address_len) != MICROTCP_ERROR,
-                "Connect-> Receive timed out in connect!");
+    // FIXME(gtheo): Retransmit only if the recvfrom time's out
+    ssize_t rcv_result = 0;
+    while(rcv_result)
+    {
+        CHECK_ERROR(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
+                           (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
+                    "Connect-> First send failed in connect!");
+
+        recvfrom(socket->sd, &rcv_header, sizeof(microtcp_header_t),
+                             MSG_WAITALL, (struct sockaddr *)address,
+                             &address_len);
+    }
+
 
     CHECK_ERROR(microtcp_header_ntoh(&rcv_header));
     CHECK_ERROR(microtcp_header_ntoh(&header));
@@ -150,10 +155,9 @@ int microtcp_connect(microtcp_sock_t *socket,
     LOG_INFO("Connect header checksum is %u", header.checksum);
 
     CHECK_ERROR(microtcp_header_hton(&header) != MICROTCP_ERROR);
-    CHECK_ERROR(
-        sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
-               (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
-        "Connect-> Second send failed in connect!");
+    CHECK_ERROR(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
+                      (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
+                "Connect-> Second send failed in connect!");
 
     // Avoid having to store the dest socket address
     CHECK_ERROR(connect(socket->sd, address, address_len),
@@ -177,11 +181,9 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     CHECK_ERROR(socket->state != INVALID, "Socket was not properly initialized");
 
     microtcp_header_t receive_header = {0};
-    if (recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
+    CHECK_ERROR(recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
                  MSG_WAITALL, (struct sockaddr *)address,
-                 &address_len) == MICROTCP_ERROR) {
-        return MICROTCP_ERROR;
-    }
+                 &address_len) != MICROTCP_ERROR);
 
     CHECK_ERROR(microtcp_header_ntoh(&receive_header));
 
@@ -205,6 +207,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     microtcp_header_hton(&accept_header);
     CHECK_ERROR(sendto(socket->sd, &accept_header, sizeof(microtcp_header_t), 0,
                        address, address_len) == MICROTCP_ERROR);
+
     CHECK_ERROR(recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
                          MSG_WAITALL, (struct sockaddr *)address,
                          &address_len) == MICROTCP_ERROR)
@@ -351,18 +354,29 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
            cwnd           = socket->cwnd,
            ssthresh       = socket->ssthresh;
 
-    uint8_t  dup_ack      = 0,
-           * data         = malloc(MICROTCP_DATA_CHUNK_SIZE);
+    uint8_t dup_ack      = 0,
+            data[MICROTCP_DATA_CHUNK_SIZE] = {0};
 
-    assert(data && "Error: malloc failed");
     LOG_INFO("Microtcp_send flags == %d", flags);
 
+    // If the length is negative, return control to the user
+    if (length <= 0 || buffer == NULL || socket == NULL ||
+        socket->state == CLOSED || socket->state == INVALID)
+    {
+        LOG_ERROR("microtcp_recv Illegal parameters");
+        errno = EINVAL;
+
+        return MICROTCP_ERROR;
+    }
+
+    // NOTE(gtheo): Loop until all data is sent
     while (data_sent < length) 
     {
         bytes_to_send = MIN(remaining, socket->curr_win_size);
         bytes_to_send = MIN(bytes_to_send, cwnd);
 
         chunks        = bytes_to_send / MICROTCP_MSS;
+
         LOG_INFO("cwnd == %lu "
                  "remaining == %lu "
                  "curr_win_size == %lu", 
@@ -460,40 +474,14 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         }
 
         for (size_t i = 0; i < chunks ; i++) {
-
-            ssize_t bytes_received = 0;
-            bytes_received         = recv(socket->sd,
-                                          data,
-                                          MICROTCP_DATA_CHUNK_SIZE,
-                                          0);
-
-            if(bytes_received == MICROTCP_ERROR)
-            {
-                socket->bytes_lost += (bytes_to_send);
-                socket->packets_lost++;
-                break;
-            }
-
-            bytes_to_send -= ((i + 1) == chunks) ? 
-                             (bytes_to_send % MICROTCP_MSS) :
-                              MICROTCP_MSS;
-
-            microtcp_header_t rcv_header;
-            memcpy(&rcv_header, data, MICROTCP_HEADER_SZ);
-            microtcp_header_ntoh(&rcv_header);
-
-            socket->buf_fill_level  += bytes_received;
-
-            socket->packets_received++;
-            socket->bytes_received  += bytes_received;
+            // TODO(gtheo): Implement packet reception logic
         }
 
-        free(data);
         remaining -= bytes_to_send;
         data_sent += bytes_to_send;
     }
 
-    return 0;
+    return (data_sent);
 }
 
 
@@ -510,16 +498,40 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
     ssize_t   bytes_recvd = 0;
     ssize_t   bytes_sent  = 0;
 
-    uint8_t*  data        = malloc(MICROTCP_DATA_CHUNK_SIZE);
-
-    CHECK_ERROR(data, "Malloc Failed");
+    uint8_t   data[MICROTCP_DATA_CHUNK_SIZE] = {0};
 
     // If the length is negative, return control to the user
-    if (length <= 0)
+    if (length <= 0 || buffer == NULL || socket == NULL ||
+        socket->state == CLOSED || socket->state == CLOSING_BY_HOST ||
+        socket->state == INVALID )
     {
-        free(data); 
-        LOG_ERROR("Passed length is negative: %lu", length);
+        LOG_ERROR("microtcp_recv Illegal parameters");
+        errno = EINVAL;
+
         return MICROTCP_ERROR;
+    }
+
+    // Log the information for debugging purposes
+    LOG_INFO("buffer length == %lu\n"
+             "socket->buf_fill_level == %lu"
+             "flags == %u \n",
+             length, 
+             socket->buf_fill_level,
+             flags);
+
+    if(socket->buf_fill_level > 0)
+    {
+        size_t to_copy = (socket->buf_fill_level < length - curr_buff_length) ?
+                          socket->buf_fill_level : length - curr_buff_length;
+
+        memcpy(buffer + curr_buff_length, socket->recvbuf ,to_copy);
+
+        curr_buff_length += to_copy;
+        socket->buf_fill_level -= to_copy;
+
+        socket->curr_win_size = socket->init_win_size - socket->buf_fill_level;
+
+        memmove(socket->recvbuf, socket->recvbuf + to_copy, socket->buf_fill_level);
     }
 
     //TODO(gtheo): Do a polling implementation
@@ -532,9 +544,9 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
         LOG_INFO("Receive-> We received %lu", bytes_recvd);
 
-        // NOTE(gtheo): Do not know if it is the correct
-        // way to handle this
-        if (bytes_recvd == MICROTCP_ERROR) continue;
+        // NOTE(gtheo): Receiver always blocks, that means that
+        // something went wrong with the reception of the packet.
+        if (bytes_recvd == MICROTCP_ERROR) return MICROTCP_ERROR;
 
         memcpy(&recv_header, data, MICROTCP_HEADER_SZ);
         microtcp_header_ntoh(&recv_header);
@@ -554,13 +566,11 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
             socket->packets_lost ++;
             socket->bytes_lost   +=  recv_header.data_len;
-            // FIXME(gtheo): Will see if it works
-            // This is not correct !!!
             continue;
         }
 
         // TODO(gtheo): Implement error handling logic
-        //              Send ACK but
+        //              Send ACK back
         if(socket->ack_number == recv_header.seq_number)
         {
             socket->ack_number += recv_header.data_len;
@@ -605,19 +615,10 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         curr_buff_length += to_copy;
         socket->buf_fill_level -= to_copy;
 
+        socket->curr_win_size = socket->init_win_size - socket->buf_fill_level;
+
         memmove(socket->recvbuf, socket->recvbuf + to_copy, socket->buf_fill_level);
     }
     
-    free(data);
-    return curr_buff_length;
-}
-
-
-ssize_t
-microtcp_recv_fsm(microtcp_sock_t *socket,
-                  void *buffer,
-                  size_t length,
-                  int flags)
-{
-    return 0;
+    return (curr_buff_length);
 }
