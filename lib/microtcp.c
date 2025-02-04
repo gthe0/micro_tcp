@@ -541,6 +541,8 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     // NOTE(gtheo): Loop until all data is sent
     while (data_sent < length) 
     {
+        buffer += data_sent;
+
         memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
         bytes_to_send = MIN(remaining, socket->curr_win_size);
         bytes_to_send = MIN(bytes_to_send, socket->cwnd);
@@ -557,8 +559,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
         // NOTE(gtheo): Dead code it seems
         for (size_t i = 0 ; i < chunks ; i++) {
-            LOG_INFO("Chunk no %lu\n" "Data to send from address inside buffer == %p",
-                     i, buffer + (MICROTCP_DATA_CHUNK_SIZE * i));
+            LOG_INFO("Chunk no %lu\n" , i);
 
             header = NEW_HEADER(socket->seq_number + (i * MICROTCP_MSS),
                                 socket->ack_number,
@@ -567,8 +568,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                                 MICROTCP_MSS,
                                 0);
 
-            LOG_INFO("Seq number %lu",
-                     socket->seq_number + (i * MICROTCP_MSS));
+            LOG_INFO("IN LOOP Seq number %lu", socket->seq_number + (i * MICROTCP_MSS));
 
             header.checksum = microtcp_checksum(&header, 
                                                 buffer + (MICROTCP_MSS * i),
@@ -607,7 +607,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         if (bytes_to_send % MICROTCP_MSS) {
 
             size_t data_sz  = (bytes_to_send % MICROTCP_MSS);
-            size_t chunk_sz =  data_sz + sizeof(microtcp_header_t);
+            size_t chunk_sz =  data_sz + MICROTCP_HEADER_SZ;
 
             memset(data, 0, MICROTCP_DATA_CHUNK_SIZE);
             
@@ -619,8 +619,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                .data_len   = data_sz
             };
             
-            LOG_INFO("Seq number %lu",
-                     socket->seq_number + (chunks * MICROTCP_MSS));
+            LOG_INFO("OUT OF LOOP Seq number %lu", socket->seq_number + (chunks * MICROTCP_MSS));
 
             header.checksum = microtcp_checksum(&header, 
                                                 buffer + (MICROTCP_MSS * chunks), 
@@ -705,7 +704,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                 if(errno == EAGAIN || errno == ETIMEDOUT)
                 {
                     // Entering slow start...
-                    socket->ssthresh /= 2;
+                    socket->ssthresh = socket->cwnd/2;
                     socket->cwnd = MIN( MICROTCP_MSS , socket->ssthresh);
 
                     break;
@@ -729,15 +728,16 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             }
 
             if(!(recv_header.control & ACK_BIT)) break;
-
-            if(socket->seq_number > recv_header.ack_number)
+            
+            if(socket->seq_number < recv_header.ack_number)
             {
                 last_ack = recv_header.ack_number;
 
                 bytes_to_send        += recv_header.ack_number - socket->seq_number;
                 socket->seq_number    = recv_header.ack_number;
-                socket->ack_number    = recv_header.seq_number + recv_header.data_len  + 1;
+                socket->ack_number    = recv_header.seq_number + recv_header.data_len;
 
+                LOG_INFO("\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n%lu, %lu %lu", bytes_send ,socket->seq_number, socket->ack_number);
                 socket->curr_win_size = recv_header.window;
 
                 dup_ack = 0;
@@ -756,6 +756,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             }
             else if(last_ack == recv_header.ack_number)
             {
+                LOG_INFO("\nBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\n%d", dup_ack);
                 if(++dup_ack == 3)
                 {
                     dup_ack = 0;
@@ -768,8 +769,10 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                 }
             }
         }
+        LOG_INFO("\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n%lu %lu", remaining,data_sent);
         remaining -= bytes_to_send;
         data_sent += bytes_to_send;
+        LOG_INFO("\nDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD\n%lu %lu", remaining,data_sent);
     }
 
     return (data_sent);
@@ -862,14 +865,16 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         if(socket->ack_number == recv_header.seq_number &&
            socket->curr_win_size > 0)
         {
-            LOG_INFO("IF ack_number == seq_number");
-            socket->ack_number += recv_header.data_len;
-
+            LOG_INFO("\nIF %lu == %u, curr_win_size = %lu !",
+                     socket->ack_number, recv_header.seq_number,
+                     socket->curr_win_size);
             memcpy(socket->recvbuf + socket->buf_fill_level,
                    data + MICROTCP_HEADER_SZ,
                    recv_header.data_len);
 
             socket->buf_fill_level += recv_header.data_len;
+            socket->ack_number     += recv_header.data_len;
+
             socket->curr_win_size  = socket->init_win_size - socket->buf_fill_level;
 
             socket->packets_received ++;
@@ -920,7 +925,6 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         }
 
         // Increament sequence number
-        socket->seq_number   ++;
         socket->packets_send ++;
         socket->bytes_received += MICROTCP_HEADER_SZ;
 
