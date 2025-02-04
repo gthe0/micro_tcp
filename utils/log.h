@@ -44,9 +44,9 @@
         fprintf(stderr, "[DEBUG]: %s:%d: " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
 #else
-#define LOG_ERROR(M, ...)                                                       \
+#define LOG_ERROR(M, ...)                                                       
 #define LOG_INFO(M, ...)
-#define LOG_WARN(M, ...)                                                                \
+#define LOG_WARN(M, ...)                                                                
 #define LOG_DEBUG(M, ...)
 #endif
 
