@@ -207,6 +207,9 @@ int microtcp_connect(microtcp_sock_t *socket,
     socket->seq_number    = rcv_header.ack_number;
     socket->init_win_size = rcv_header.window;
 
+    LOG_INFO("Connect header seq_number is %lu", socket->ack_number);
+    LOG_INFO("Connect header ack_number is %lu", socket->seq_number);
+
     header.ack_number = socket->ack_number;
     header.seq_number = socket->seq_number;
 
@@ -313,8 +316,11 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     CHECK_ERROR(checksum == receive_header.checksum &&
                 receive_header.control == ACK_BIT);
 
-    socket->ack_number = receive_header.seq_number + 1;
+    socket->ack_number = receive_header.seq_number;
     socket->seq_number = receive_header.ack_number;
+
+    LOG_INFO("Accept header seq_number is %lu", socket->ack_number);
+    LOG_INFO("Accept header ack_number is %lu", socket->seq_number);
 
     // Avoid having to store the dest socket address
     if(connect(socket->sd, address, address_len) == MICROTCP_ERROR)
@@ -715,10 +721,9 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             microtcp_header_ntoh(&recv_header);
 
             uint32_t checksum = recv_header.checksum;
-            recv_header.checksum = 0;
 
-            memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
-            recv_header.checksum = crc32(data, MICROTCP_DATA_CHUNK_SIZE);
+            recv_header.checksum = 0;
+            recv_header.checksum = crc32(data, MICROTCP_HEADER_SZ);
 
             if(recv_header.checksum != checksum)
             {
@@ -873,7 +878,6 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
             socket->packets_received ++;
             socket->bytes_received   += recv_header.data_len;
-
         }
         else
         {
@@ -900,7 +904,12 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
                                  socket->curr_win_size,
                                  0,
                                  0);
-        
+
+        send_header.checksum = crc32((uint8_t*)&send_header, 
+                                     MICROTCP_HEADER_SZ);
+
+        microtcp_header_hton(&send_header);
+
         bytes_sent = send(socket->sd,
                           &send_header,
                           MICROTCP_HEADER_SZ,
@@ -914,7 +923,9 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         }
 
         // Increament sequence number
-        socket->seq_number++;
+        socket->seq_number   ++;
+        socket->packets_send ++;
+        socket->bytes_received += MICROTCP_HEADER_SZ;
 
         curr_buff_length += buffer_copy(socket,
                                         buffer,
