@@ -45,6 +45,11 @@ static ssize_t buffer_copy(microtcp_sock_t *socket,
                            size_t length,
                            ssize_t curr_buff_length);
 
+static uint32_t
+microtcp_checksum(microtcp_header_t* header,
+                  void*              payload,
+                  size_t             length);
+
 // Socket Creation
 microtcp_sock_t microtcp_socket(int domain, 
                                 int type,
@@ -953,4 +958,35 @@ static ssize_t buffer_copy(microtcp_sock_t *socket,
     memmove(socket->recvbuf, socket->recvbuf + to_copy, socket->buf_fill_level);
 
     return to_copy;
+}
+
+
+static uint32_t
+microtcp_checksum(microtcp_header_t* header,
+                  void*              payload,
+                  size_t             length)
+{
+    uint32_t header_checksum = 0,
+             result_checksum = 0;
+
+    if(header != NULL) 
+    {
+        header_checksum  = header->checksum;
+        header->checksum = 0;
+
+        result_checksum  = crc32((uint8_t*) header,
+                                 MICROTCP_HEADER_SZ);
+
+        header->checksum = header_checksum;
+    }
+
+
+    if(payload != NULL && length > 0)
+    {
+        result_checksum = update_crc32(result_checksum,
+                                       payload,
+                                       length);
+    }
+
+    return result_checksum;
 }
