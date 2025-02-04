@@ -60,13 +60,17 @@ microtcp_sock_t microtcp_socket(int domain,
     socket_obj.cwnd     = MICROTCP_INIT_CWND;
     socket_obj.ssthresh = MICROTCP_INIT_SSTHRESH;
 
-    CHECK_ERROR_STMT((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) != MICROTCP_ERROR,
-                     socket_obj.state = INVALID,
-                     "Socket could not be opened.");
+    if((socket_obj.sd = socket(domain, SOCK_DGRAM, IPPROTO_UDP)) == MICROTCP_ERROR)
+    {
+        LOG_ERROR("Socket could not be opened.");
+        socket_obj.state = INVALID;
+    }
 
-    CHECK_ERROR_STMT(setsockopt(socket_obj.sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) >= 0, 
-                     socket_obj.state = INVALID, 
-                     "Setting SO_REUSEADDR failed.");
+    if(setsockopt(socket_obj.sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
+    {
+        LOG_ERROR("Setting SO_REUSEADDR failed.");
+        socket_obj.state = INVALID;
+    }
 
     return (socket_obj);
 }
@@ -76,12 +80,30 @@ int microtcp_bind(microtcp_sock_t *socket,
                   const struct sockaddr *address,
                   socklen_t address_len)
 {
-    CHECK_ERROR(socket, "Socket is not initialized");
-    CHECK_ERROR(address, "Address is NULL");
-    CHECK_ERROR(socket->state != INVALID, "Socket was not properly initialized" );
+    if(address == NULL)
+    {
+        LOG_ERROR("Address is NULL");
+        return MICROTCP_ERROR;
+    }
 
-    CHECK_ERROR(bind(socket->sd, address, address_len) != MICROTCP_ERROR,
-                "Bind Failed");
+    if(socket == NULL)
+    {
+        LOG_ERROR("Socket is not initialized");
+        return MICROTCP_ERROR;
+    }
+
+    if(socket->state == INVALID)
+    {
+        LOG_ERROR("Socket is in an invalid state!");
+        return MICROTCP_ERROR;
+    }
+
+    if(bind(socket->sd, address, address_len) == MICROTCP_ERROR)
+    {
+        LOG_ERROR("");
+        perror("Bind Failed");
+        return MICROTCP_ERROR;
+    }
 
     socket->state = LISTEN;
     return 0;
@@ -92,16 +114,28 @@ int microtcp_connect(microtcp_sock_t *socket,
                      const struct sockaddr *address,
                      socklen_t address_len)
 {
+    if(address == NULL)
+    {
+        LOG_ERROR("Address is NULL");
+        return MICROTCP_ERROR;
+    }
 
-    CHECK_ERROR(socket, "Socket is not initialized");
-    CHECK_ERROR(address, "Address is NULL");
-    CHECK_ERROR(socket->state != INVALID,
-                "Socket was not properly initialized");
+    if(socket == NULL)
+    {
+        LOG_ERROR("Socket is not initialized");
+        return MICROTCP_ERROR;
+    }
+
+    if(socket->state == INVALID)
+    {
+        LOG_ERROR("Socket is in an invalid state!");
+        return MICROTCP_ERROR;
+    }
 
     // Time out interval
     struct timeval timeout = {
-        .tv_sec = 0,
-        .tv_usec = MICROTCP_ACK_TIMEOUT_US
+        .tv_sec = 10,
+        .tv_usec = 0
     };
 
     CHECK_ERROR((setsockopt(socket->sd, SOL_SOCKET, SO_RCVTIMEO,
@@ -110,27 +144,35 @@ int microtcp_connect(microtcp_sock_t *socket,
 
     /* Header Creation Phase */
     microtcp_header_t rcv_header = {0};
-    microtcp_header_t header =
-        NEW_CONNECT_HEADER(socket->seq_number, socket->ack_number);
+    microtcp_header_t header = NEW_CONNECT_HEADER(socket->seq_number, 
+                                                  socket->ack_number);
+
     header.checksum = crc32((uint8_t *)&header, sizeof(microtcp_header_t));
 
-    LOG_INFO("Connect header checksum is %u", header.checksum);
+    LOG_INFO("Connect header checksum is %x", header.checksum);
     CHECK_ERROR(microtcp_header_hton(&header) != MICROTCP_ERROR);
 
-    CHECK_ERROR(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
-                       (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
-                "Connect-> First send failed in connect!");
+    // First Send of the 3-way handshake
+    if(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
+             (struct sockaddr *)address, address_len) < 0)
+    {
+        LOG_ERROR("Connect-> First send failed!");
+        return MICROTCP_ERROR;
+    }
 
     socket->packets_send++;
 
-    CHECK_ERROR(recvfrom(socket->sd, &rcv_header, sizeof(microtcp_header_t),
-                          MSG_WAITALL, (struct sockaddr *)address,
-                          &address_len) != MICROTCP_ERROR);
+    if(recvfrom(socket->sd, &rcv_header, sizeof(microtcp_header_t), 
+                0, (struct sockaddr *)address, &address_len) < 0)
+    {
+        LOG_ERROR("Connect-> receive failed!");
+        return MICROTCP_ERROR;
+    }
 
     socket->packets_received++;
 
-    CHECK_ERROR(microtcp_header_ntoh(&rcv_header));
-    CHECK_ERROR(microtcp_header_ntoh(&header));
+    CHECK_ERROR(microtcp_header_ntoh(&rcv_header) != MICROTCP_ERROR);
+    CHECK_ERROR(microtcp_header_ntoh(&header)     != MICROTCP_ERROR);
 
     uint32_t checksum = rcv_header.checksum;
     rcv_header.checksum = 0;
@@ -140,9 +182,26 @@ int microtcp_connect(microtcp_sock_t *socket,
     LOG_INFO("Connect-> rcv_header.checksum == %u, checksum == %u",
              rcv_header.checksum, checksum);
 
-    CHECK_ERROR(checksum == rcv_header.checksum &&
-                rcv_header.control == SYN_ACK,
-                "Connect-> Error during transmition");
+    // Check if the checksum is correct
+    if(checksum != rcv_header.checksum)
+    {
+        LOG_ERROR("Checksum mismatch %x and %x", checksum, rcv_header.checksum);
+        return MICROTCP_ERROR;
+    }
+     
+    // Check whether we got a SYN_ACK or not
+    if(rcv_header.control != SYN_ACK)
+    {
+        LOG_ERROR("The Received packet was not a SYN_ACK: %x", rcv_header.control);
+        return MICROTCP_ERROR;
+    }
+
+    // Check ACK and Sequence Numbers
+    if(rcv_header.ack_number != socket->seq_number + 1)
+    {
+        LOG_ERROR("Socket seq number and packet ack number mismatch!");
+        return MICROTCP_ERROR;
+    }
 
     socket->ack_number    = rcv_header.seq_number + 1;
     socket->seq_number    = rcv_header.ack_number;
@@ -155,18 +214,32 @@ int microtcp_connect(microtcp_sock_t *socket,
     header.checksum = 0;
     header.checksum = crc32((uint8_t *)&header, sizeof(microtcp_header_t));
 
-    LOG_INFO("Connect header checksum is %u", header.checksum);
-
+    LOG_INFO("Connect header checksum is %x", header.checksum);
     CHECK_ERROR(microtcp_header_hton(&header) != MICROTCP_ERROR);
 
-    // FIXME(gtheo): Retransmit only if the recvfrom time's out
-    CHECK_ERROR(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
-                       (struct sockaddr *)address, address_len) != MICROTCP_ERROR,
-                "Connect-> First send failed in connect!");
+    // First Send of the 3-way handshake
+    if(sendto(socket->sd, &header, sizeof(microtcp_header_t), 0,
+             (struct sockaddr *)address, address_len) < 0)
+    {
+        LOG_ERROR("Connect-> First send failed!");
+        return MICROTCP_ERROR;
+    }
 
+    socket->packets_send++;
     // Avoid having to store the dest socket address
-    CHECK_ERROR(connect(socket->sd, address, address_len),
-                "Connect call failed");
+    if(connect(socket->sd, address, address_len) == MICROTCP_ERROR)
+    {
+        LOG_ERROR("Connect call failed");
+        return MICROTCP_ERROR;
+    }
+
+    // Set the timeout timer for the sender
+    timeout.tv_sec = 0;
+    timeout.tv_usec = MICROTCP_ACK_TIMEOUT_US;
+
+    CHECK_ERROR((setsockopt(socket->sd, SOL_SOCKET, SO_RCVTIMEO,
+                            &timeout, sizeof(struct timeval)) >= 0),
+                "Time Interval option failed");
 
     // Establish the connection...
     socket->recvbuf = malloc(MICROTCP_RECVBUF_LEN);
@@ -201,9 +274,9 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
 
     microtcp_header_t receive_header = {0};
     CHECK_ERROR(recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
-                 MSG_WAITALL, (struct sockaddr *)address, &address_len) != MICROTCP_ERROR);
+                 0, (struct sockaddr *)address, &address_len) != MICROTCP_ERROR);
 
-    CHECK_ERROR(microtcp_header_ntoh(&receive_header));
+    CHECK_ERROR(microtcp_header_ntoh(&receive_header) != MICROTCP_ERROR);
 
     uint32_t checksum = receive_header.checksum;
 
@@ -227,7 +300,7 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
                        address, address_len) != MICROTCP_ERROR);
 
     CHECK_ERROR(recvfrom(socket->sd, &receive_header, sizeof(microtcp_header_t),
-                         MSG_WAITALL, (struct sockaddr *)address,
+                         0, (struct sockaddr *)address,
                          &address_len) != MICROTCP_ERROR)
 
     microtcp_header_ntoh(&receive_header);
@@ -244,8 +317,11 @@ int microtcp_accept(microtcp_sock_t *socket, struct sockaddr *address,
     socket->seq_number = receive_header.ack_number;
 
     // Avoid having to store the dest socket address
-    CHECK_ERROR(connect(socket->sd, address, address_len),
-                "Connect call failed");
+    if(connect(socket->sd, address, address_len) == MICROTCP_ERROR)
+    {
+        LOG_ERROR("Connect call failed");
+        return MICROTCP_ERROR;
+    }
 
     // Establish the connection...
     socket->recvbuf = malloc(MICROTCP_RECVBUF_LEN);
@@ -436,7 +512,8 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     microtcp_header_t recv_header  = {}; 
     microtcp_header_t header  = {}; 
 
-    size_t remaining      = 0,
+    size_t 
+    remaining      = length,
     data_sent      = 0,
     chunks         = 0,
     bytes_send     = 0,
@@ -460,6 +537,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
     // NOTE(gtheo): Loop until all data is sent
     while (data_sent < length) 
     {
+        memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
         bytes_to_send = MIN(remaining, socket->curr_win_size);
         bytes_to_send = MIN(bytes_to_send, socket->cwnd);
 
@@ -474,7 +552,6 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                  chunks, bytes_to_send );
 
         for (size_t i = 0 ; i < chunks ; i++) {
-
             LOG_INFO("Chunk no %lu\n" "Data to send from address inside buffer == %p",
                      i, buffer + (MICROTCP_DATA_CHUNK_SIZE * i));
 
@@ -497,6 +574,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
             microtcp_header_hton(&header);
 
+            memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
             memcpy(data,
                   (uint8_t*)&header,
                    sizeof(header));
@@ -580,7 +658,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
             LOG_INFO("Chunk no %lu", chunks);
         }
 
-        if(bytes_to_send == 0 ||
+        if(bytes_to_send == 0       ||
            socket->curr_win_size == 0)
         {
             LOG_INFO("Curr_win_size  %lu == %lu and chunks == %lu",
@@ -591,6 +669,10 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                                 socket->ack_number,
                                 socket->curr_win_size,
                                 0, 0, 0);
+
+            header.checksum = crc32(data, sizeof(header));
+            microtcp_header_hton(&header);
+
             send(socket->sd,
                  &header,
                  MICROTCP_HEADER_SZ,
@@ -636,7 +718,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
             if(recv_header.checksum != checksum)
             {
-                LOG_ERROR("recv_header's checksum mismatch: %u == %u", 
+                LOG_ERROR("recv_header's checksum mismatch: %x == %x", 
                           recv_header.checksum, checksum);
 
                 socket->packets_lost ++;
@@ -733,6 +815,7 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
     //TODO(gtheo): Do a polling implementation
     while(curr_buff_length < length)
     {
+        memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
         bytes_recvd = recv(socket->sd,
                            data,
                            MICROTCP_DATA_CHUNK_SIZE, 
@@ -748,6 +831,8 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         microtcp_header_ntoh(&recv_header);
 
         uint32_t checksum = recv_header.checksum;
+        LOG_ERROR("checksum is: %x", recv_header.checksum);
+
         recv_header.checksum = 0;
 
         memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
@@ -755,7 +840,7 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
         if(recv_header.checksum != checksum)
         {
-            LOG_ERROR("recv_header's checksum mismatch: %u == %u", 
+            LOG_ERROR("recv_header's checksum mismatch: %x == %x", 
                       recv_header.checksum, checksum);
 
             socket->packets_lost ++;
