@@ -164,7 +164,7 @@ server_tcp (uint16_t listen_port, const char *file)
 
 int server_microtcp(uint16_t port, const char *filename)
 {
-    microtcp_sock_t sock, accepted_sock;
+    microtcp_sock_t sock;
     uint8_t buffer[CHUNK_SIZE];
     FILE *fp;
     ssize_t received, total = 0;
@@ -215,7 +215,7 @@ int server_microtcp(uint16_t port, const char *filename)
     print_statistics(total, start, end);
 
     microtcp_shutdown(&sock, SHUT_RDWR);
-    microtcp_shutdown(&accepted_sock, SHUT_RDWR);
+    close(&sock);
     fclose(fp);
     return 0;
 }
@@ -350,6 +350,7 @@ int client_microtcp(const char *server_ip, uint16_t port, const char *filename)
     printf("microTCP transfer completed.\n");
 
     microtcp_shutdown(&sock, SHUT_RDWR);
+    close(&sock);
     fclose(fp);
     return 0;
 }
