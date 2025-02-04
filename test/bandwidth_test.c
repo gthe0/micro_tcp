@@ -349,6 +349,7 @@ int client_microtcp(const char *server_ip, uint16_t port, const char *filename)
     printf("microTCP transfer completed.\n");
 
     microtcp_shutdown(&sock, SHUT_RDWR);
+    printf("microTCP shutdown completed.\n");
     fclose(fp);
     return 0;
 }
