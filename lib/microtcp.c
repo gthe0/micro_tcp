@@ -179,7 +179,7 @@ int microtcp_connect(microtcp_sock_t *socket,
     rcv_header.checksum =
         crc32((uint8_t *)&rcv_header, sizeof(microtcp_header_t));
 
-    LOG_INFO("Connect-> rcv_header.checksum == %u, checksum == %u",
+    LOG_INFO("Connect-> rcv_header.checksum == %x, checksum == %x",
              rcv_header.checksum, checksum);
 
     // Check if the checksum is correct
@@ -551,6 +551,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
         LOG_INFO("No. chunks %lu, bytes to send %lu",
                  chunks, bytes_to_send );
 
+        // NOTE(gtheo): Dead code it seems
         for (size_t i = 0 ; i < chunks ; i++) {
             LOG_INFO("Chunk no %lu\n" "Data to send from address inside buffer == %p",
                      i, buffer + (MICROTCP_DATA_CHUNK_SIZE * i));
@@ -570,7 +571,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                                            buffer + (MICROTCP_MSS * i),
                                            MICROTCP_MSS);
 
-            LOG_INFO("The checksum is %u", header.checksum);
+            LOG_INFO("The checksum is %x", header.checksum);
 
             microtcp_header_hton(&header);
 
@@ -624,7 +625,7 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                                            buffer + (MICROTCP_MSS * chunks),
                                            data_sz);
 
-            LOG_INFO("The checksum is %u", header.checksum);
+            LOG_INFO("The checksum is %x", header.checksum);
 
             microtcp_header_hton(&header);
 
@@ -670,9 +671,10 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
                                 socket->curr_win_size,
                                 0, 0, 0);
 
-            header.checksum = crc32(data, sizeof(header));
-            microtcp_header_hton(&header);
+            header.checksum = crc32((uint8_t*)&header,
+                                     MICROTCP_HEADER_SZ);
 
+            microtcp_header_hton(&header);
             send(socket->sd,
                  &header,
                  MICROTCP_HEADER_SZ,
@@ -684,13 +686,15 @@ ssize_t microtcp_send(microtcp_sock_t *socket,
 
         bytes_to_send = 0;
         for (size_t i = 0; i < chunks ; i++) {
+
+            memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
             // TODO(gtheo): Implement packet reception logic
             ssize_t recv_bytes = recv(socket->sd, 
                                       data,
-                                      MICROTCP_DATA_CHUNK_SIZE,
+                                      MICROTCP_HEADER_SZ,
                                       0);
 
-            LOG_INFO("Receive-> We received %lu", recv_bytes);
+            LOG_INFO("Receive-> We received %ld", recv_bytes);
 
             // If we encountered any errors related to 
             // the timeout, then break
@@ -831,12 +835,17 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         microtcp_header_ntoh(&recv_header);
 
         uint32_t checksum = recv_header.checksum;
-        LOG_ERROR("checksum is: %x", recv_header.checksum);
+
+        LOG_INFO("BEFORE: checksum is: %x", recv_header.checksum);
 
         recv_header.checksum = 0;
+        recv_header.checksum = crc32((uint8_t*)&recv_header, MICROTCP_HEADER_SZ);
 
-        memcpy(data,&recv_header,MICROTCP_HEADER_SZ);
-        recv_header.checksum = crc32(data, MICROTCP_DATA_CHUNK_SIZE);
+        recv_header.checksum = update_crc32(recv_header.checksum,
+                                            data + MICROTCP_HEADER_SZ,
+                                            recv_header.data_len);
+
+        LOG_INFO("AFTER: checksum is: %x", recv_header.checksum);
 
         if(recv_header.checksum != checksum)
         {
@@ -852,8 +861,10 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
         // TODO(gtheo): Implement error handling logic
         //              Send ACK back
-        if(socket->ack_number == recv_header.seq_number && socket->curr_win_size > 0)
+        if(socket->ack_number == recv_header.seq_number &&
+           socket->curr_win_size > 0)
         {
+            LOG_INFO("IF ack_number == seq_number");
             socket->ack_number += recv_header.data_len;
 
             memcpy(socket->recvbuf + socket->buf_fill_level, data + MICROTCP_HEADER_SZ , recv_header.data_len);
@@ -862,9 +873,14 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
             socket->packets_received ++;
             socket->bytes_received   += recv_header.data_len;
+
         }
         else
         {
+            LOG_INFO("\nELSE %lu == %u, curr_win_size = %lu !",
+                     socket->ack_number, recv_header.seq_number,
+                     socket->curr_win_size);
+
             socket->packets_lost ++;
             socket->bytes_lost   += recv_header.data_len;
         }
