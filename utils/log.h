@@ -22,7 +22,7 @@
 #define UTILS_LOG_H_
 
 /* Set to 0 to disable debug messages at compile time ;) */
-#define ENABLE_DEBUG_MSG 0
+#define ENABLE_DEBUG_MSG 1
 
 #if ENABLE_DEBUG_MSG
 
