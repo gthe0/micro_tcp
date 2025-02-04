@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
@@ -385,7 +386,7 @@ main (int argc, char **argv)
         }
 
         /* Convert the given file to absolute path */
-        char abs_path[_PC_PATH_MAX];
+        char abs_path[PATH_MAX] = {0};
 
         if (realpath(filestr, abs_path) == NULL) {
           perror("filename could not be resolved to an absolute path.");
@@ -444,7 +445,6 @@ main (int argc, char **argv)
    * Depending the use arguments execute the appropriate functions
    */
   if (is_server) {
-
     if (use_microtcp) {
       exit_code = server_microtcp (port, filestr);
     }

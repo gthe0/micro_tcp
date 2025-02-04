@@ -53,7 +53,7 @@ main (int argc, char **argv)
 {
   int                   opt;
   int                   ret;
-  int                   port;
+  int                   port = 0;
   int                   mean_inter;
   microtcp_sock_t       sock;
   struct sockaddr_in    sin;
