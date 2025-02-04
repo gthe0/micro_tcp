@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define MIN(a,b) ((a) > (b) ? (b) : (a))
 

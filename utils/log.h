@@ -22,12 +22,11 @@
 #define UTILS_LOG_H_
 
 /* Set to 0 to disable debug messages at compile time ;) */
-#define ENABLE_DEBUG_MSG 1
+#define ENABLE_DEBUG_MSG 0
 
 #if ENABLE_DEBUG_MSG
 
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include <sys/syscall.h>
 
