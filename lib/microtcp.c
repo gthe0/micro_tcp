@@ -387,6 +387,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         finalize_header.checksum =
             crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
+        LOG_INFO("SHUTDOWN ->  checksum == %x", finalize_header.checksum);
         microtcp_header_hton(&finalize_header);
 
         if(send(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0) == MICROTCP_ERROR)
@@ -414,6 +415,9 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         receive_header.checksum =
             crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
 
+        LOG_INFO("SHUTDOWN ->  calculated checksum == %x", receive_header.checksum);
+        LOG_INFO("SHUTDOWN ->  checksum == %x", checksum);
+
         if (checksum != receive_header.checksum )
         {
             LOG_ERROR("Shutdown-> First Checksum failed!");
@@ -433,7 +437,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
 
         /* Receive FIN-ACK message from server */
         memset(&receive_header, 0, sizeof(microtcp_header_t));
-        if (recv(socket->sd, &receive_header, sizeof(microtcp_header_t), 0) != MICROTCP_ERROR) {
+        if (recv(socket->sd, &receive_header, sizeof(microtcp_header_t), 0) < MICROTCP_ERROR) {
             LOG_ERROR("Shutdown-> Second client receive failed!");
             return MICROTCP_ERROR;
         }
@@ -444,6 +448,9 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         receive_header.checksum = 0;
         receive_header.checksum =
             crc32((uint8_t *)&receive_header, sizeof(microtcp_header_t));
+
+        LOG_INFO("SHUTDOWN ->  calculated checksum == %x", receive_header.checksum);
+        LOG_INFO("SHUTDOWN ->  checksum == %x", checksum);
 
         if (checksum != receive_header.checksum)
         {
@@ -469,12 +476,13 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
             crc32((uint8_t *)&finalize_header, sizeof(microtcp_header_t));
 
         microtcp_header_hton(&finalize_header);
-        if (send(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0) != MICROTCP_ERROR) {
+        if (send(socket->sd, &finalize_header, sizeof(microtcp_header_t), 0) < 0) {
+            LOG_ERROR("SHUTDOWN -> Final send by client failed!");
             return MICROTCP_ERROR;
         }
 
         socket->state = CLOSED;
-        LOG_INFO("CLIENT: Is state closed ? %d", socket->state == CLOSED);
+        LOG_INFO("SHUTDOWN CLIENT END"); 
     }
     else if(socket->state == CLOSING_BY_PEER)
     {
@@ -525,6 +533,7 @@ int microtcp_shutdown(microtcp_sock_t *socket, int how) {
         socket->seq_number = receive_header.ack_number;
 
         socket->state = CLOSED;
+        LOG_INFO("SHUTDOWN SERVER END"); 
     }
 
     return 0;
@@ -819,8 +828,7 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
 
     // If the length is negative, return control to the user
     if (length <= 0 || buffer == NULL || socket == NULL ||
-        socket->state == CLOSED || socket->state == CLOSING_BY_PEER ||
-        socket->state == INVALID )
+        socket->state == CLOSED || socket->state == INVALID )
     {
         LOG_ERROR("microtcp_recv Illegal parameters");
         errno = EINVAL;
@@ -845,7 +853,8 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
                                         curr_buff_length);
     }
 
-    while(curr_buff_length < length)
+    while(curr_buff_length < length && 
+          socket->state != CLOSING_BY_PEER)
     {
         memset(data,0,MICROTCP_DATA_CHUNK_SIZE);
         bytes_recvd = recv(socket->sd,
@@ -917,8 +926,11 @@ ssize_t microtcp_recv(microtcp_sock_t *socket,
         if(recv_header.control & FIN_ACK)
         {
             socket->state = CLOSING_BY_PEER;
-            // FIXME(gtheo): Add a shutdown call or make different error codes
-            return MICROTCP_ERROR;
+            curr_buff_length += buffer_copy(socket,
+                                            buffer,
+                                            length,
+                                            curr_buff_length);
+            return (curr_buff_length);
         }
 
         // TODO(gtheo): Send ACK
